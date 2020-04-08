@@ -5,7 +5,17 @@ requirements = [
     "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git@09e3ba4dfe333f86d6c5c1048e07210924294be9#egg=nemo_toolkit",
 ]
 
-extra_requirements = {"server": ["rpyc==4.1.4"]}
+extra_requirements = {
+    "server": ["rpyc~=4.1.4"],
+    "data": [
+        "google-cloud-texttospeech~=1.0.1",
+        "tqdm~=4.39.0",
+        "pydub~=0.23.1",
+        "scikit_learn~=0.22.1",
+        "pandas~=1.0.3",
+        "boto3~=1.12.35",
+    ],
+}
 
 setup(
     name="jasper-asr",
@@ -22,6 +32,8 @@ setup(
         "console_scripts": [
             "jasper_transcribe = jasper.transcribe:main",
             "jasper_asr_rpyc_server = jasper.server:main",
+            "jasper_asr_trainer = jasper.train:main",
+            "jasper_asr_data_generate = jasper.data_utils.generator:main",
         ]
     },
     zip_safe=False,
