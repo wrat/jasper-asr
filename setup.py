@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 requirements = [
     "ruamel.yaml",
@@ -16,6 +16,7 @@ extra_requirements = {
         "boto3~=1.12.35",
     ],
 }
+packages = find_packages()
 
 setup(
     name="jasper-asr",
@@ -27,7 +28,7 @@ setup(
     license="MIT",
     install_requires=requirements,
     extras_require=extra_requirements,
-    packages=["."],
+    packages=packages,
     entry_points={
         "console_scripts": [
             "jasper_transcribe = jasper.transcribe:main",
