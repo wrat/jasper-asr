@@ -82,8 +82,7 @@ def parse_args():
     )
 
     args = parser.parse_args()
-
-    if args.max_steps is not None and args.num_epochs is not None:
+    if args.max_steps is None and args.num_epochs is None:
         raise ValueError("Either max_steps or num_epochs should be provided.")
     return args
 
@@ -311,7 +310,6 @@ def main():
 
     # build dags
     train_loss, callbacks, steps_per_epoch = create_all_dags(args, neural_factory)
-
     # train model
     neural_factory.train(
         tensors_to_optimize=[train_loss],

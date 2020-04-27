@@ -4,7 +4,7 @@
 import argparse
 import logging
 from pathlib import Path
-from .utils import random_pnr_generator, manifest_str
+from .utils import random_pnr_generator, asr_data_writer
 from .tts.googletts import GoogleTTS
 from tqdm import tqdm
 import random
@@ -15,27 +15,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def generate_asr_data(output_dir, count):
+def pnr_tts_streamer(count):
     google_voices = GoogleTTS.voice_list()
     gtts = GoogleTTS()
-    wav_dir = output_dir / Path("pnr_data")
-    wav_dir.mkdir(parents=True, exist_ok=True)
-    asr_manifest = output_dir / Path("pnr_data").with_suffix(".json")
-    with asr_manifest.open("w") as mf:
-        for pnr_code in tqdm(random_pnr_generator(count)):
-            tts_code = (
-                f'<speak><say-as interpret-as="verbatim">{pnr_code}</say-as></speak>'
-            )
-            param = random.choice(google_voices)
-            param["sample_rate"] = 24000
-            param["num_channels"] = 1
-            wav_data = gtts.text_to_speech(text=tts_code, params=param)
-            audio_dur = len(wav_data[44:]) / (2 * 24000)
-            pnr_af = wav_dir / Path(pnr_code).with_suffix(".wav")
-            pnr_af.write_bytes(wav_data)
-            rel_pnr_path = pnr_af.relative_to(output_dir)
-            manifest = manifest_str(str(rel_pnr_path), audio_dur, pnr_code)
-            mf.write(manifest)
+    for pnr_code in tqdm(random_pnr_generator(count)):
+        tts_code = f'<speak><say-as interpret-as="verbatim">{pnr_code}</say-as></speak>'
+        param = random.choice(google_voices)
+        param["sample_rate"] = 24000
+        param["num_channels"] = 1
+        wav_data = gtts.text_to_speech(text=tts_code, params=param)
+        audio_dur = len(wav_data[44:]) / (2 * 24000)
+        yield pnr_code, audio_dur, wav_data
+
+
+def generate_asr_data_fromtts(output_dir, dataset_name, count):
+    asr_data_writer(output_dir, dataset_name, pnr_tts_streamer(count))
 
 
 def arg_parser():
@@ -52,13 +46,16 @@ def arg_parser():
     parser.add_argument(
         "--count", type=int, default=3, help="number of datapoints to generate"
     )
+    parser.add_argument(
+        "--dataset_name", type=str, default="pnr_data", help="name of the dataset"
+    )
     return parser
 
 
 def main():
     parser = arg_parser()
     args = parser.parse_args()
-    generate_asr_data(**vars(args))
+    generate_asr_data_fromtts(**vars(args))
 
 
 if __name__ == "__main__":

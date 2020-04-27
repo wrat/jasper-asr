@@ -2,6 +2,8 @@ import numpy as np
 import wave
 import io
 import json
+from pathlib import Path
+from num2words import num2words
 
 
 def manifest_str(path, dur, text):
@@ -36,6 +38,27 @@ def random_pnr_generator(count=10000):
     np_codes = np_code_seed.T
     codes = [(b"".join(np_codes[i])).decode("utf-8") for i in range(len(np_codes))]
     return codes
+
+
+def alnum_to_asr_tokens(text):
+    letters = " ".join(list(text))
+    num_tokens = [num2words(c) if "0" <= c <= "9" else c for c in letters]
+    return ("".join(num_tokens)).lower()
+
+
+def asr_data_writer(output_dir, dataset_name, asr_data_source):
+    dataset_dir = output_dir / Path(dataset_name)
+    (dataset_dir / Path("wav")).mkdir(parents=True, exist_ok=True)
+    asr_manifest = dataset_dir / Path("manifest.json")
+    with asr_manifest.open("w") as mf:
+        for pnr_code, audio_dur, wav_data in asr_data_source:
+            pnr_af = dataset_dir / Path("wav") / Path(pnr_code).with_suffix(".wav")
+            pnr_af.write_bytes(wav_data)
+            rel_pnr_path = pnr_af.relative_to(dataset_dir)
+            manifest = manifest_str(
+                str(rel_pnr_path), audio_dur, alnum_to_asr_tokens(pnr_code)
+            )
+            mf.write(manifest)
 
 
 def main():
