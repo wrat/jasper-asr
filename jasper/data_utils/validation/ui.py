@@ -65,9 +65,9 @@ if not hasattr(st, "mongo_connected"):
     st.mongo_connected = True
 
 
-def clear_mongo_corrections():
-    col = pymongo.MongoClient("mongodb://localhost:27017/").test.asr_validation
-    col.delete_many({"type": "correction"})
+# def clear_mongo_corrections():
+#     col = pymongo.MongoClient("mongodb://localhost:27017/").test.asr_validation
+#     col.delete_many({"type": "correction"})
 
 
 def preprocess_datapoint(idx, rel, sample):
@@ -153,6 +153,7 @@ def main(manifest: Path):
         st.update_entry(
             sample["gold_chars"], {"status": selected, "correction": correct_code}
         )
+        st.update_cursor(sample_no + 1)
     if correction_entry:
         st.markdown(
             f'Your Response: **{correction_entry["value"]["status"]}** Correction: **{correction_entry["value"]["correction"]}**'
