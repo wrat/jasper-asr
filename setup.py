@@ -25,6 +25,14 @@ extra_requirements = {
         "typer[all]==0.1.1",
         "lenses @ git+https://github.com/ingolemo/python-lenses.git@b2a2a9aa5b61540992d70b2cf36008d0121e8948#egg=lenses",
     ],
+    "validation": [
+        "rpyc~=4.1.4",
+        "tqdm~=4.39.0",
+        "librosa==0.7.2",
+        "pydub~=0.23.1",
+        "streamlit==0.58.0",
+        "stringcase==1.2.0"
+    ]
     # "train": [
     #     "torchaudio==0.5.0",
     #     "torch-stft==0.1.4",

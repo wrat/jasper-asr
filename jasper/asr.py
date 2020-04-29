@@ -62,7 +62,7 @@ class JasperASR(object):
         wf = wave.open(audio_file_path, "w")
         wf.setnchannels(1)
         wf.setsampwidth(2)
-        wf.setframerate(16000)
+        wf.setframerate(24000)
         wf.writeframesraw(audio_data)
         wf.close()
         manifest = {"audio_filepath": audio_file_path, "duration": 60, "text": "todo"}

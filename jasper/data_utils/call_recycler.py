@@ -46,6 +46,7 @@ def analyze(
     from tqdm import tqdm
     from .utils import asr_data_writer
     from pydub import AudioSegment
+    # from itertools import product, chain
 
     matplotlib.rcParams["agg.path.chunksize"] = 10000
 
