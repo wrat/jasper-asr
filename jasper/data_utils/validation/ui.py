@@ -14,7 +14,6 @@ import typer
 from .jasper_client import transcriber_pretrained, transcriber_speller
 from .st_rerun import rerun
 
-
 app = typer.Typer()
 st.title("ASR Speller Validation")
 
@@ -53,7 +52,6 @@ if not hasattr(st, "mongo_connected"):
             {"$set": {"value": value}},
             upsert=True,
         )
-        rerun()
 
     cursor_obj = mongo_conn.find_one({"type": "current_cursor"})
     if not cursor_obj:
@@ -76,7 +74,6 @@ def preprocess_datapoint(idx, rel, sample):
     audio_path = rel / Path(sample["audio_filepath"])
     res["audio_path"] = audio_path
     res["gold_chars"] = audio_path.stem
-    res["gold_phone"] = sample["text"]
     aud_seg = (
         AudioSegment.from_wav(audio_path)
         .set_channels(1)
@@ -85,7 +82,7 @@ def preprocess_datapoint(idx, rel, sample):
     )
     res["pretrained_asr"] = transcriber_pretrained(aud_seg.raw_data)
     res["speller_asr"] = transcriber_speller(aud_seg.raw_data)
-    res["wer"] = word_error_rate([res["gold_phone"]], [res["speller_asr"]])
+    res["wer"] = word_error_rate([res["text"]], [res["speller_asr"]])
     (y, sr) = librosa.load(audio_path)
     plt.tight_layout()
     librosa.display.waveplot(y=y, sr=sr)
@@ -116,7 +113,7 @@ def main(manifest: Path):
     sample_no = st.get_current_cursor()
     sample = pnr_data[sample_no]
     st.markdown(
-        f"{sample_no+1} of {len(pnr_data)} : **{sample['gold_chars']}** spelled *{sample['gold_phone']}*"
+        f"{sample_no+1} of {len(pnr_data)} : **{sample['gold_chars']}** spelled *{sample['text']}*"
     )
     new_sample = st.number_input(
         "Go To Sample:", value=sample_no + 1, min_value=1, max_value=len(pnr_data)
@@ -125,7 +122,7 @@ def main(manifest: Path):
         st.update_cursor(new_sample - 1)
     st.sidebar.title(f"Details: [{sample['real_idx']}]")
     st.sidebar.markdown(f"Gold: **{sample['gold_chars']}**")
-    st.sidebar.markdown(f"Expected Speech: *{sample['gold_phone']}*")
+    st.sidebar.markdown(f"Expected Speech: *{sample['text']}*")
     st.sidebar.title("Results:")
     st.sidebar.text(f"Pretrained:{sample['pretrained_asr']}")
     st.sidebar.text(f"Speller:{sample['speller_asr']}")
@@ -158,6 +155,7 @@ def main(manifest: Path):
         st.markdown(
             f'Your Response: **{correction_entry["value"]["status"]}** Correction: **{correction_entry["value"]["correction"]}**'
         )
+    # real_idx = st.text_input("Go to real-index:", value=sample['real_idx'])
     # st.markdown(
     #     ",".join(
     #         [

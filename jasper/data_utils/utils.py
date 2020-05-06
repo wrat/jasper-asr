@@ -61,6 +61,27 @@ def asr_data_writer(output_dir, dataset_name, asr_data_source):
             mf.write(manifest)
 
 
+def asr_manifest_reader(data_manifest_path: Path):
+    print(f'reading manifest from {data_manifest_path}')
+    with data_manifest_path.open("r") as pf:
+        pnr_jsonl = pf.readlines()
+    pnr_data = [json.loads(v) for v in pnr_jsonl]
+    for p in pnr_data:
+        p['audio_path'] = data_manifest_path.parent / Path(p['audio_filepath'])
+        p['chars'] = Path(p['audio_filepath']).stem
+        yield p
+
+
+def asr_manifest_writer(asr_manifest_path: Path, manifest_str_source):
+    with asr_manifest_path.open("w") as mf:
+        print(f'opening {asr_manifest_path} for writing manifest')
+        for mani_dict in manifest_str_source:
+            manifest = manifest_str(
+                mani_dict['audio_filepath'], mani_dict['duration'], mani_dict['text']
+            )
+            mf.write(manifest)
+
+
 def main():
     for c in random_pnr_generator():
         print(c)
