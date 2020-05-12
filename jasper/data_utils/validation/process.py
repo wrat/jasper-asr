@@ -1,105 +1,137 @@
-import pymongo
-import typer
-
-# import matplotlib.pyplot as plt
-from pathlib import Path
 import json
 import shutil
+from pathlib import Path
 
-# import pandas as pd
-from pydub import AudioSegment
-
-# from .jasper_client import transcriber_pretrained, transcriber_speller
-from jasper.data_utils.validation.jasper_client import (
-    transcriber_pretrained,
-    transcriber_speller,
-)
-from jasper.data_utils.utils import alnum_to_asr_tokens
-
-# import importlib
-# import jasper.data_utils.utils
-# importlib.reload(jasper.data_utils.utils)
-from jasper.data_utils.utils import asr_manifest_reader, asr_manifest_writer
-from nemo.collections.asr.metrics import word_error_rate
-
-# from tqdm import tqdm as tqdm_base
+import typer
 from tqdm import tqdm
+
+from ..utils import (
+    alnum_to_asr_tokens,
+    ExtendedPath,
+    asr_manifest_reader,
+    asr_manifest_writer,
+    get_mongo_conn,
+)
 
 app = typer.Typer()
 
 
+def preprocess_datapoint(idx, rel_root, sample, use_domain_asr):
+    import matplotlib.pyplot as plt
+    import librosa
+    import librosa.display
+    from pydub import AudioSegment
+    from nemo.collections.asr.metrics import word_error_rate
+    from jasper.data_utils.validation.jasper_client import (
+        transcriber_pretrained,
+        transcriber_speller,
+    )
+
+    try:
+        res = dict(sample)
+        res["real_idx"] = idx
+        audio_path = rel_root / Path(sample["audio_filepath"])
+        res["audio_path"] = str(audio_path)
+        res["spoken"] = alnum_to_asr_tokens(res["text"])
+        res["utterance_id"] = audio_path.stem
+        aud_seg = (
+            AudioSegment.from_file_using_temporary_files(audio_path)
+            .set_channels(1)
+            .set_sample_width(2)
+            .set_frame_rate(24000)
+        )
+        res["pretrained_asr"] = transcriber_pretrained(aud_seg.raw_data)
+        res["pretrained_wer"] = word_error_rate([res["text"]], [res["pretrained_asr"]])
+        if use_domain_asr:
+            res["domain_asr"] = transcriber_speller(aud_seg.raw_data)
+            res["domain_wer"] = word_error_rate(
+                [res["spoken"]], [res["pretrained_asr"]]
+            )
+        wav_plot_path = (
+            rel_root / Path("wav_plots") / Path(audio_path.name).with_suffix(".png")
+        )
+        if not wav_plot_path.exists():
+            fig = plt.Figure()
+            ax = fig.add_subplot()
+            (y, sr) = librosa.load(audio_path)
+            librosa.display.waveplot(y=y, sr=sr, ax=ax)
+            with wav_plot_path.open("wb") as wav_plot_f:
+                fig.set_tight_layout(True)
+                fig.savefig(wav_plot_f, format="png", dpi=50)
+                # fig.close()
+        res["plot_path"] = str(wav_plot_path)
+        return res
+    except BaseException as e:
+        print(f'failed on {idx}: {sample["audio_filepath"]} with {e}')
+
+
+@app.command()
+def dump_validation_ui_data(
+    data_manifest_path: Path = Path("./data/asr_data/call_alphanum/manifest.json"),
+    dump_path: Path = Path("./data/valiation_data/ui_dump.json"),
+    use_domain_asr: bool = True,
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from functools import partial
+
+    plot_dir = data_manifest_path.parent / Path("wav_plots")
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    typer.echo(f"Using data manifest:{data_manifest_path}")
+    with data_manifest_path.open("r") as pf:
+        pnr_jsonl = pf.readlines()
+        pnr_funcs = [
+            partial(
+                preprocess_datapoint,
+                i,
+                data_manifest_path.parent,
+                json.loads(v),
+                use_domain_asr,
+            )
+            for i, v in enumerate(pnr_jsonl)
+        ]
+
+        def exec_func(f):
+            return f()
+
+        with ThreadPoolExecutor(max_workers=20) as exe:
+            print("starting all plot tasks")
+            pnr_data = filter(
+                None,
+                list(
+                    tqdm(
+                        exe.map(exec_func, pnr_funcs),
+                        position=0,
+                        leave=True,
+                        total=len(pnr_funcs),
+                    )
+                ),
+            )
+    wer_key = "domain_wer" if use_domain_asr else "pretrained_wer"
+    result = sorted(pnr_data, key=lambda x: x[wer_key], reverse=True)
+    ui_config = {"use_domain_asr": use_domain_asr, "data": result}
+    ExtendedPath(dump_path).write_json(ui_config)
+
+
 @app.command()
 def dump_corrections(dump_path: Path = Path("./data/corrections.json")):
-    col = pymongo.MongoClient("mongodb://localhost:27017/").test.asr_validation
+    col = get_mongo_conn().test.asr_validation
 
     cursor_obj = col.find({"type": "correction"}, projection={"_id": False})
     corrections = [c for c in cursor_obj]
-    dump_f = dump_path.open("w")
-    json.dump(corrections, dump_f, indent=2)
-    dump_f.close()
-
-
-def preprocess_datapoint(idx, rel, sample):
-    res = dict(sample)
-    res["real_idx"] = idx
-    audio_path = rel / Path(sample["audio_filepath"])
-    res["audio_path"] = str(audio_path)
-    res["gold_chars"] = audio_path.stem
-    res["gold_phone"] = sample["text"]
-    aud_seg = (
-        AudioSegment.from_wav(audio_path)
-        .set_channels(1)
-        .set_sample_width(2)
-        .set_frame_rate(24000)
-    )
-    res["pretrained_asr"] = transcriber_pretrained(aud_seg.raw_data)
-    res["speller_asr"] = transcriber_speller(aud_seg.raw_data)
-    res["wer"] = word_error_rate([res["gold_phone"]], [res["speller_asr"]])
-    return res
-
-
-def load_dataset(data_manifest_path: Path):
-    typer.echo(f"Using data manifest:{data_manifest_path}")
-    with data_manifest_path.open("r") as pf:
-        pnr_jsonl = pf.readlines()
-        pnr_data = [
-            preprocess_datapoint(i, data_manifest_path.parent, json.loads(v))
-            for i, v in enumerate(tqdm(pnr_jsonl, position=0, leave=True))
-        ]
-    result = sorted(pnr_data, key=lambda x: x["wer"], reverse=True)
-    return result
-
-
-@app.command()
-def dump_processed_data(
-    data_manifest_path: Path = Path("./data/asr_data/call_alphanum/manifest.json"),
-    dump_path: Path = Path("./data/processed_data.json"),
-):
-    typer.echo(f"Using data manifest:{data_manifest_path}")
-    with data_manifest_path.open("r") as pf:
-        pnr_jsonl = pf.readlines()
-        pnr_data = [
-            preprocess_datapoint(i, data_manifest_path.parent, json.loads(v))
-            for i, v in enumerate(tqdm(pnr_jsonl, position=0, leave=True))
-        ]
-    result = sorted(pnr_data, key=lambda x: x["wer"], reverse=True)
-    dump_path = Path("./data/processed_data.json")
-    dump_f = dump_path.open("w")
-    json.dump(result, dump_f, indent=2)
-    dump_f.close()
+    ExtendedPath(dump_path).write_json(corrections)
 
 
 @app.command()
 def fill_unannotated(
-    processed_data_path: Path = Path("./data/processed_data.json"),
-    corrections_path: Path = Path("./data/corrections.json"),
+    processed_data_path: Path = Path("./data/valiation_data/ui_dump.json"),
+    corrections_path: Path = Path("./data/valiation_data/corrections.json"),
 ):
     processed_data = json.load(processed_data_path.open())
     corrections = json.load(corrections_path.open())
     annotated_codes = {c["code"] for c in corrections}
     all_codes = {c["gold_chars"] for c in processed_data}
     unann_codes = all_codes - annotated_codes
-    mongo_conn = pymongo.MongoClient("mongodb://localhost:27017/").test.asr_validation
+    mongo_conn = get_mongo_conn().test.asr_validation
     for c in unann_codes:
         mongo_conn.find_one_and_update(
             {"type": "correction", "code": c},
@@ -111,8 +143,8 @@ def fill_unannotated(
 @app.command()
 def update_corrections(
     data_manifest_path: Path = Path("./data/asr_data/call_alphanum/manifest.json"),
-    processed_data_path: Path = Path("./data/processed_data.json"),
-    corrections_path: Path = Path("./data/corrections.json"),
+    processed_data_path: Path = Path("./data/valiation_data/ui_dump.json"),
+    corrections_path: Path = Path("./data/valiation_data/corrections.json"),
 ):
     def correct_manifest(manifest_data_gen, corrections_path):
         corrections = json.load(corrections_path.open())
@@ -166,6 +198,12 @@ def update_corrections(
     new_data_manifest_path = data_manifest_path.with_name("manifest.new")
     asr_manifest_writer(new_data_manifest_path, corrected_manifest)
     new_data_manifest_path.replace(data_manifest_path)
+
+
+@app.command()
+def clear_mongo_corrections():
+    col = get_mongo_conn().test.asr_validation
+    col.delete_many({"type": "correction"})
 
 
 def main():

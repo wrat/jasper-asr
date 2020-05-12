@@ -22,13 +22,19 @@ extra_requirements = {
         "matplotlib==3.2.1",
         "pandas==1.0.3",
         "tabulate==0.8.7",
+        "natural==0.2.0",
+        "num2words==0.5.10",
         "typer[all]==0.1.1",
+        "python-slugify==4.0.0",
         "lenses @ git+https://github.com/ingolemo/python-lenses.git@b2a2a9aa5b61540992d70b2cf36008d0121e8948#egg=lenses",
     ],
     "validation": [
         "rpyc~=4.1.4",
+        "pymongo==3.10.1",
+        "typer[all]==0.1.1",
         "tqdm~=4.39.0",
         "librosa==0.7.2",
+        "matplotlib==3.2.1",
         "pydub~=0.23.1",
         "streamlit==0.58.0",
         "stringcase==1.2.0"
@@ -58,6 +64,7 @@ setup(
             "jasper_asr_trainer = jasper.train:main",
             "jasper_asr_data_generate = jasper.data_utils.generator:main",
             "jasper_asr_data_recycle = jasper.data_utils.call_recycler:main",
+            "jasper_asr_data_validation = jasper.data_utils.validation.process:main",
             "jasper_asr_data_preprocess = jasper.data_utils.process:main",
         ]
     },

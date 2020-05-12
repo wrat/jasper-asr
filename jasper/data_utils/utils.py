@@ -1,8 +1,13 @@
 import numpy as np
 import wave
 import io
+import os
 import json
 from pathlib import Path
+
+import pymongo
+from slugify import slugify
+from uuid import uuid4
 from num2words import num2words
 
 
@@ -46,40 +51,63 @@ def alnum_to_asr_tokens(text):
     return ("".join(num_tokens)).lower()
 
 
-def asr_data_writer(output_dir, dataset_name, asr_data_source):
+def asr_data_writer(output_dir, dataset_name, asr_data_source, verbose=False):
     dataset_dir = output_dir / Path(dataset_name)
     (dataset_dir / Path("wav")).mkdir(parents=True, exist_ok=True)
     asr_manifest = dataset_dir / Path("manifest.json")
+    num_datapoints = 0
     with asr_manifest.open("w") as mf:
-        for pnr_code, audio_dur, wav_data in asr_data_source:
-            pnr_af = dataset_dir / Path("wav") / Path(pnr_code).with_suffix(".wav")
+        for transcript, audio_dur, wav_data in asr_data_source:
+            fname = str(uuid4()) + "_" + slugify(transcript, max_length=8)
+            pnr_af = dataset_dir / Path("wav") / Path(fname).with_suffix(".wav")
             pnr_af.write_bytes(wav_data)
             rel_pnr_path = pnr_af.relative_to(dataset_dir)
-            manifest = manifest_str(
-                str(rel_pnr_path), audio_dur, alnum_to_asr_tokens(pnr_code)
-            )
+            manifest = manifest_str(str(rel_pnr_path), audio_dur, transcript)
             mf.write(manifest)
+            if verbose:
+                print(f"writing '{transcript}' of duration {audio_dur}")
+            num_datapoints += 1
+    return num_datapoints
 
 
 def asr_manifest_reader(data_manifest_path: Path):
-    print(f'reading manifest from {data_manifest_path}')
+    print(f"reading manifest from {data_manifest_path}")
     with data_manifest_path.open("r") as pf:
         pnr_jsonl = pf.readlines()
     pnr_data = [json.loads(v) for v in pnr_jsonl]
     for p in pnr_data:
-        p['audio_path'] = data_manifest_path.parent / Path(p['audio_filepath'])
-        p['chars'] = Path(p['audio_filepath']).stem
+        p["audio_path"] = data_manifest_path.parent / Path(p["audio_filepath"])
+        p["chars"] = Path(p["audio_filepath"]).stem
         yield p
 
 
 def asr_manifest_writer(asr_manifest_path: Path, manifest_str_source):
     with asr_manifest_path.open("w") as mf:
-        print(f'opening {asr_manifest_path} for writing manifest')
+        print(f"opening {asr_manifest_path} for writing manifest")
         for mani_dict in manifest_str_source:
             manifest = manifest_str(
-                mani_dict['audio_filepath'], mani_dict['duration'], mani_dict['text']
+                mani_dict["audio_filepath"], mani_dict["duration"], mani_dict["text"]
             )
             mf.write(manifest)
+
+
+class ExtendedPath(type(Path())):
+    """docstring for ExtendedPath."""
+
+    def read_json(self):
+        with self.open("r") as jf:
+            return json.load(jf)
+
+    def write_json(self, data):
+        self.parent.mkdir(parents=True, exist_ok=True)
+        with self.open("w") as jf:
+            return json.dump(data, jf, indent=2)
+
+
+def get_mongo_conn(host=''):
+    mongo_host = host if host else os.environ.get("MONGO_HOST", "localhost")
+    mongo_uri = f"mongodb://{mongo_host}:27017/"
+    return pymongo.MongoClient(mongo_uri)
 
 
 def main():

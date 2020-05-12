@@ -12,6 +12,29 @@ app = typer.Typer()
 
 
 @app.command()
+def export_logs(call_logs_file: Path = Path("./call_sia_logs.yaml")):
+    from pymongo import MongoClient
+    from collections import defaultdict
+    from ruamel.yaml import YAML
+
+    yaml = YAML()
+    mongo_collection = MongoClient("mongodb://localhost:27017/").test.calls
+    caller_calls = defaultdict(lambda: [])
+    for call in mongo_collection.find():
+        sysid = call["SystemID"]
+        call_uri = f"http://sia-data.agaralabs.com/calls/{sysid}"
+        caller = call["Caller"]
+        caller_calls[caller].append(call_uri)
+    caller_list = []
+    for caller in caller_calls:
+        caller_list.append({"name": caller, "calls": caller_calls[caller]})
+    output_yaml = {"users": caller_list}
+    typer.echo("exporting call logs to yaml file")
+    with call_logs_file.open("w") as yf:
+        yaml.dump(output_yaml, yf)
+
+
+@app.command()
 def analyze(
     leaderboard: bool = False,
     plot_calls: bool = False,
@@ -19,8 +42,6 @@ def analyze(
     call_logs_file: Path = Path("./call_logs.yaml"),
     output_dir: Path = Path("./data"),
 ):
-    call_logs_file = Path("./call_logs.yaml")
-    output_dir = Path("./data")
 
     from urllib.parse import urlsplit
     from functools import reduce
@@ -35,7 +56,6 @@ def analyze(
     from datetime import timedelta
 
     # from concurrent.futures import ThreadPoolExecutor
-    from dateutil.relativedelta import relativedelta
     import librosa
     import librosa.display
     from lenses import lens
@@ -46,6 +66,8 @@ def analyze(
     from tqdm import tqdm
     from .utils import asr_data_writer
     from pydub import AudioSegment
+    from natural.date import compress
+
     # from itertools import product, chain
 
     matplotlib.rcParams["agg.path.chunksize"] = 10000
@@ -256,8 +278,11 @@ def analyze(
                 code_fb = BytesIO()
                 code_seg.export(code_fb, format="wav")
                 code_wav = code_fb.getvalue()
-                # import pdb; pdb.set_trace()
-                yield code, code_seg.duration_seconds, code_wav
+                # search for actual pnr code and handle plain codes as well
+                extracted_code = (
+                    re.search(r"'(.*)'", code).groups(0)[0] if len(code) > 6 else code
+                )
+                yield extracted_code, code_seg.duration_seconds, code_wav
 
         call_lens = lens["users"].Each()["calls"].Each()
         call_stats = call_lens.modify(retrieve_callmeta)(call_logs)
@@ -275,22 +300,17 @@ def analyze(
 
         asr_data_writer(call_asr_data, "call_alphanum", data_source())
 
-    # @leader_app.command()
     def show_leaderboard():
         def compute_user_stats(call_stat):
             n_samples = (
                 lens["calls"].Each()["process"]["num_samples"].get_monoid()(call_stat)
             )
             n_duration = lens["calls"].Each()["duration"].get_monoid()(call_stat)
-            rel_dur = relativedelta(
-                seconds=int(n_duration.total_seconds()),
-                microseconds=n_duration.microseconds,
-            )
             return {
                 "num_samples": n_samples,
                 "duration": n_duration.total_seconds(),
                 "samples_rate": n_samples / n_duration.total_seconds(),
-                "duration_str": f"{rel_dur.minutes} mins {rel_dur.seconds} secs",
+                "duration_str": compress(n_duration, pad=" "),
                 "name": call_stat["name"],
             }
 
@@ -313,8 +333,8 @@ def analyze(
             }
         )[["Rank", "Name", "Codes", "Duration"]]
         print(
-            """Today's ASR Speller Dataset Leaderboard:
-----------------------------------------"""
+            """ASR Speller Dataset Leaderboard  :
+---------------------------------"""
         )
         print(leader_board.to_string(index=False))
 
