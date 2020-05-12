@@ -108,6 +108,8 @@ class JasperASR(object):
         tensors = self.neural_factory.infer(tensors=eval_tensors)
         prediction = post_process_predictions(tensors[0], self.labels)
         prediction_text = ". ".join(prediction)
+        os.unlink(manifest_file.name)
+        os.unlink(audio_file.name)
         return prediction_text
 
     def transcribe_file(self, audio_file, *args, **kwargs):
