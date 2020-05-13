@@ -1,15 +1,17 @@
+import os
+# from pathlib import Path
+
 import typer
 import rpyc
-import os
-from pathlib import Path
 from rpyc.utils.server import ThreadedServer
+import nemo.collections.asr as nemo_asr
 
 app = typer.Typer()
 
 
 class ASRDataService(rpyc.Service):
-    def get_data_loader(self, data_manifest: Path):
-        return "hello"
+    def get_data_loader(self):
+        return nemo_asr.AudioToTextDataLayer
 
 
 @app.command()

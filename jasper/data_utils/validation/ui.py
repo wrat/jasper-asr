@@ -63,12 +63,13 @@ def main(manifest: Path):
     asr_data = ui_config["data"]
     use_domain_asr = ui_config["use_domain_asr"]
     sample_no = st.get_current_cursor()
+    if len(asr_data) - 1 < sample_no or sample_no < 0:
+        print("Invalid samplno resetting to 0")
+        st.update_cursor(0)
     sample = asr_data[sample_no]
-    title_type = 'Speller ' if use_domain_asr else ''
+    title_type = "Speller " if use_domain_asr else ""
     st.title(f"ASR {title_type}Validation")
-    addl_text = (
-        f"spelled *{sample['spoken']}*" if use_domain_asr else ""
-    )
+    addl_text = f"spelled *{sample['spoken']}*" if use_domain_asr else ""
     st.markdown(f"{sample_no+1} of {len(asr_data)} : **{sample['text']}**" + addl_text)
     new_sample = st.number_input(
         "Go To Sample:", value=sample_no + 1, min_value=1, max_value=len(asr_data)
