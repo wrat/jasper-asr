@@ -61,7 +61,7 @@ setup(
         "console_scripts": [
             "jasper_transcribe = jasper.transcribe:main",
             "jasper_asr_rpyc_server = jasper.server:main",
-            "jasper_asr_trainer = jasper.train:main",
+            "jasper_asr_trainer = jasper.training_utils.train:main",
             "jasper_asr_data_generate = jasper.data_utils.generator:main",
             "jasper_asr_data_recycle = jasper.data_utils.call_recycler:main",
             "jasper_asr_data_validation = jasper.data_utils.validation.process:main",

@@ -113,7 +113,7 @@ def dump_validation_ui_data(
 
 
 @app.command()
-def dump_corrections(dump_path: Path = Path("./data/corrections.json")):
+def dump_corrections(dump_path: Path = Path("./data/valiation_data/corrections.json")):
     col = get_mongo_conn().test.asr_validation
 
     cursor_obj = col.find({"type": "correction"}, projection={"_id": False})

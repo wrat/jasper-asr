@@ -15,7 +15,9 @@ from nemo.collections.asr.helpers import (
     process_evaluation_batch,
     process_evaluation_epoch,
 )
+
 from nemo.utils.lr_policies import CosineAnnealing
+from .data_loaders import RpycAudioToTextDataLayer
 
 logging = nemo.logging
 
@@ -44,7 +46,7 @@ def parse_args():
         eval_freq=100,
         load_dir="./train/models/jasper/",
         warmup_steps=3,
-        exp_name='jasper-speller'
+        exp_name="jasper-speller",
     )
 
     # Overwrite default args
@@ -67,6 +69,14 @@ def parse_args():
         type=str,
         required=False,
         help="model configuration file: model.yaml",
+    )
+
+    parser.add_argument(
+        "--remote_data",
+        type=str,
+        required=False,
+        default="",
+        help="remote dataloader endpoint",
     )
 
     # Create new args
@@ -110,15 +120,23 @@ def create_all_dags(args, neural_factory):
     # Calculate num_workers for dataloader
     total_cpus = os.cpu_count()
     cpu_per_traindl = max(int(total_cpus / neural_factory.world_size), 1)
-
+    # cpu_per_traindl = 1
     # perturb_config = jasper_params.get('perturb', None)
     train_dl_params = copy.deepcopy(jasper_params["AudioToTextDataLayer"])
     train_dl_params.update(jasper_params["AudioToTextDataLayer"]["train"])
     del train_dl_params["train"]
     del train_dl_params["eval"]
     # del train_dl_params["normalize_transcripts"]
-
-    data_layer = nemo_asr.AudioToTextDataLayer(
+    data_loader_layer = nemo_asr.AudioToTextDataLayer
+    if args.remote_data:
+        train_dl_params['rpyc_host'] = args.remote_data
+        data_loader_layer = RpycAudioToTextDataLayer
+    # if args.remote_data:
+    #     # import pdb; pdb.set_trace()
+    #     data_loader_layer = rpyc.connect(
+    #         args.remote_data, 8064, config={"sync_request_timeout": 600}
+    #     ).root.get_data_loader()
+    data_layer = data_loader_layer(
         manifest_filepath=args.train_dataset,
         sample_rate=sample_rate,
         labels=vocab,
@@ -150,13 +168,15 @@ def create_all_dags(args, neural_factory):
 
     eval_dl_params = copy.deepcopy(jasper_params["AudioToTextDataLayer"])
     eval_dl_params.update(jasper_params["AudioToTextDataLayer"]["eval"])
+    if args.remote_data:
+        eval_dl_params['rpyc_host'] = args.remote_data
     del eval_dl_params["train"]
     del eval_dl_params["eval"]
     data_layers_eval = []
 
     if args.eval_datasets:
         for eval_datasets in args.eval_datasets:
-            data_layer_eval = nemo_asr.AudioToTextDataLayer(
+            data_layer_eval = data_loader_layer(
                 manifest_filepath=eval_datasets,
                 sample_rate=sample_rate,
                 labels=vocab,
