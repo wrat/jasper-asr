@@ -143,8 +143,8 @@ def fill_unannotated(
 @app.command()
 def update_corrections(
     data_manifest_path: Path = Path("./data/asr_data/call_alphanum/manifest.json"),
-    processed_data_path: Path = Path("./data/valiation_data/ui_dump.json"),
     corrections_path: Path = Path("./data/valiation_data/corrections.json"),
+    skip_incorrect: bool = True,
 ):
     def correct_manifest(manifest_data_gen, corrections_path):
         corrections = json.load(corrections_path.open())
@@ -170,15 +170,18 @@ def update_corrections(
                 }
             elif d["chars"] in correction_map:
                 correct_text = correction_map[d["chars"]]
-                renamed_set.add(correct_text)
-                new_name = str(Path(correct_text).with_suffix(".wav"))
-                d["audio_path"].replace(d["audio_path"].with_name(new_name))
-                new_filepath = str(Path(d["audio_filepath"]).with_name(new_name))
-                yield {
-                    "audio_filepath": new_filepath,
-                    "duration": d["duration"],
-                    "text": alnum_to_asr_tokens(correct_text),
-                }
+                if skip_incorrect:
+                    print(f'skipping incorrect {d["audio_path"]} corrected to {correct_text}')
+                else:
+                    renamed_set.add(correct_text)
+                    new_name = str(Path(correct_text).with_suffix(".wav"))
+                    d["audio_path"].replace(d["audio_path"].with_name(new_name))
+                    new_filepath = str(Path(d["audio_filepath"]).with_name(new_name))
+                    yield {
+                        "audio_filepath": new_filepath,
+                        "duration": d["duration"],
+                        "text": alnum_to_asr_tokens(correct_text),
+                    }
             else:
                 # don't delete if another correction points to an old file
                 if d["chars"] not in renamed_set:
@@ -202,8 +205,12 @@ def update_corrections(
 
 @app.command()
 def clear_mongo_corrections():
-    col = get_mongo_conn().test.asr_validation
-    col.delete_many({"type": "correction"})
+    delete = typer.confirm("are you sure you want to clear mongo collection it?")
+    if delete:
+        col = get_mongo_conn().test.asr_validation
+        col.delete_many({"type": "correction"})
+        typer.echo("deleted mongo collection.")
+    typer.echo("Aborted")
 
 
 def main():

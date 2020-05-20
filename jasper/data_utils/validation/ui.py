@@ -53,7 +53,7 @@ if not hasattr(st, "mongo_connected"):
 
 @st.cache()
 def load_ui_data(validation_ui_data_path: Path):
-    typer.echo(f"Using validation ui data from :{validation_ui_data_path}")
+    typer.echo(f"Using validation ui data from {validation_ui_data_path}")
     return ExtendedPath(validation_ui_data_path).read_json()
 
 
@@ -117,6 +117,11 @@ def main(manifest: Path):
     #     pass
     # if st.button("Next Untagged"):
     #     pass
+    text_sample = st.text_input("Go to Text:", value='')
+    if text_sample != '':
+        candidates = [i for (i, p) in enumerate(asr_data) if p["text"] == text_sample or p["spoken"] == text_sample]
+        if len(candidates) > 0:
+            st.update_cursor(candidates[0])
     real_idx = st.number_input(
         "Go to real-index",
         value=sample["real_idx"],
