@@ -104,9 +104,9 @@ class ExtendedPath(type(Path())):
             return json.dump(data, jf, indent=2)
 
 
-def get_mongo_conn(host=''):
+def get_mongo_conn(host='', port=27017):
     mongo_host = host if host else os.environ.get("MONGO_HOST", "localhost")
-    mongo_uri = f"mongodb://{mongo_host}:27017/"
+    mongo_uri = f"mongodb://{mongo_host}:{port}/"
     return pymongo.MongoClient(mongo_uri)
 
 
