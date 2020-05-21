@@ -22,7 +22,7 @@ def preprocess_datapoint(idx, rel_root, sample, use_domain_asr):
     import librosa.display
     from pydub import AudioSegment
     from nemo.collections.asr.metrics import word_error_rate
-    from jasper.data_utils.validation.jasper_client import (
+    from jasper.client import (
         transcriber_pretrained,
         transcriber_speller,
     )

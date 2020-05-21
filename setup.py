@@ -60,12 +60,14 @@ setup(
     entry_points={
         "console_scripts": [
             "jasper_transcribe = jasper.transcribe:main",
-            "jasper_asr_rpyc_server = jasper.server:main",
-            "jasper_asr_trainer = jasper.training_utils.train:main",
-            "jasper_asr_data_generate = jasper.data_utils.generator:main",
-            "jasper_asr_data_recycle = jasper.data_utils.call_recycler:main",
-            "jasper_asr_data_validation = jasper.data_utils.validation.process:main",
-            "jasper_asr_data_preprocess = jasper.data_utils.process:main",
+            "jasper_server = jasper.server:main",
+            "jasper_trainer = jasper.training.cli:main",
+            "jasper_data_generate = jasper.data.tts_generator:main",
+            "jasper_data_call_recycle = jasper.data.call_recycler:main",
+            "jasper_data_asr_recycle = jasper.data.asr_recycler:main",
+            "jasper_data_server = jasper.data.server:main",
+            "jasper_data_validation = jasper.data.validation.process:main",
+            "jasper_data_preprocess = jasper.data.process:main",
         ]
     },
     zip_safe=False,

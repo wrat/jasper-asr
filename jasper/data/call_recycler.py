@@ -131,10 +131,11 @@ def analyze(
     call_logs = yaml.load(call_logs_file.read_text())
 
     def get_call_meta(call_obj):
-        s3_event_url_p = urlsplit(call_obj["DataURI"])
+        meta_s3_uri = call_obj["DataURI"]
+        s3_event_url_p = urlsplit(meta_s3_uri)
         saved_meta_path = call_meta_dir / Path(Path(s3_event_url_p.path).name)
         if not saved_meta_path.exists():
-            print(f"downloading : {saved_meta_path}")
+            print(f"downloading : {saved_meta_path} from {meta_s3_uri}")
             s3.download_file(
                 s3_event_url_p.netloc, s3_event_url_p.path[1:], str(saved_meta_path)
             )
@@ -206,7 +207,7 @@ def analyze(
         utter_events = uevs[: ev_count - ev_count % 3]
         saved_wav_path = call_media_dir / Path(Path(s3_wav_url_p.path).name)
         if not saved_wav_path.exists():
-            print(f"downloading : {saved_wav_path}")
+            print(f"downloading : {saved_wav_path} from {s3_wav_url}")
             s3.download_file(
                 s3_wav_url_p.netloc, s3_wav_url_p.path[1:], str(saved_wav_path)
             )
