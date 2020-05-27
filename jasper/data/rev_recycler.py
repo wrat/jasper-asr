@@ -63,7 +63,8 @@ def extract_data(
             # print(monologue["speaker_name"])
             speaker_channel = channel_map.get(monologue["speaker_name"])
             if not speaker_channel:
-                print(f'unknown speaker tag {monologue["speaker_name"]} in wav:{wav_path} skipping.')
+                if verbose:
+                    print(f'unknown speaker tag {monologue["speaker_name"]} in wav:{wav_path} skipping.')
                 continue
             try:
                 start_time = (
@@ -79,7 +80,8 @@ def extract_data(
                     .collect()(monologue)[-1]
                 )
             except IndexError:
-                print(f'error when loading timestamp events in wav:{wav_path} skipping.')
+                if verbose:
+                    print(f'error when loading timestamp events in wav:{wav_path} skipping.')
                 continue
 
             # offset by 500 msec to include first vad? discarded audio
@@ -92,7 +94,8 @@ def extract_data(
             text_clean = re.sub(r"\[.*\]", "", text)
             # only if some reasonable audio data is present yield it
             if tscript_wav_seg.duration_seconds < 0.5:
-                print(f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.')
+                if verbose:
+                    print(f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.')
                 continue
             yield text_clean, tscript_wav_seg.duration_seconds, tscript_wav
 
@@ -113,7 +116,8 @@ def extract_data(
                     .collect()(monologue)[-1]
                 )
             except IndexError:
-                print(f'error when loading timestamp events in wav:{wav_path} skipping.')
+                if verbose:
+                    print(f'error when loading timestamp events in wav:{wav_path} skipping.')
                 continue
 
             # offset by 500 msec to include first vad? discarded audio
@@ -125,7 +129,8 @@ def extract_data(
             text = "".join(lens["elements"].Each()["value"].collect()(monologue))
             text_clean = re.sub(r"\[.*\]", "", text)
             if tscript_wav_seg.duration_seconds < 0.5:
-                print(f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.')
+                if verbose:
+                    print(f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.')
                 continue
             yield text_clean, tscript_wav_seg.duration_seconds, tscript_wav
 
