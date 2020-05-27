@@ -16,7 +16,9 @@ from ..utils import (
 app = typer.Typer()
 
 
-def preprocess_datapoint(idx, rel_root, sample, use_domain_asr, annotation_only, enable_plots):
+def preprocess_datapoint(
+    idx, rel_root, sample, use_domain_asr, annotation_only, enable_plots
+):
     import matplotlib.pyplot as plt
     import librosa
     import librosa.display
@@ -28,17 +30,20 @@ def preprocess_datapoint(idx, rel_root, sample, use_domain_asr, annotation_only,
         res["real_idx"] = idx
         audio_path = rel_root / Path(sample["audio_filepath"])
         res["audio_path"] = str(audio_path)
-        res["spoken"] = alnum_to_asr_tokens(res["text"])
+        if use_domain_asr:
+            res["spoken"] = alnum_to_asr_tokens(res["text"])
+        else:
+            res["spoken"] = res["text"]
         res["utterance_id"] = audio_path.stem
-        aud_seg = (
-            AudioSegment.from_file_using_temporary_files(audio_path)
-            .set_channels(1)
-            .set_sample_width(2)
-            .set_frame_rate(24000)
-        )
         if not annotation_only:
             from jasper.client import transcriber_pretrained, transcriber_speller
 
+            aud_seg = (
+                AudioSegment.from_file_using_temporary_files(audio_path)
+                .set_channels(1)
+                .set_sample_width(2)
+                .set_frame_rate(24000)
+            )
             res["pretrained_asr"] = transcriber_pretrained(aud_seg.raw_data)
             res["pretrained_wer"] = word_error_rate(
                 [res["text"]], [res["pretrained_asr"]]
