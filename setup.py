@@ -12,7 +12,7 @@ extra_requirements = {
     "data": [
         "google-cloud-texttospeech~=1.0.1",
         "tqdm~=4.39.0",
-        "pydub~=0.23.1",
+        "pydub~=0.24.0",
         "scikit_learn~=0.22.1",
         "pandas~=1.0.3",
         "boto3~=1.12.35",
@@ -35,7 +35,7 @@ extra_requirements = {
         "tqdm~=4.39.0",
         "librosa==0.7.2",
         "matplotlib==3.2.1",
-        "pydub~=0.23.1",
+        "pydub~=0.24.0",
         "streamlit==0.58.0",
         "stringcase==1.2.0"
     ]
@@ -65,6 +65,7 @@ setup(
             "jasper_data_generate = jasper.data.tts_generator:main",
             "jasper_data_call_recycle = jasper.data.call_recycler:main",
             "jasper_data_asr_recycle = jasper.data.asr_recycler:main",
+            "jasper_data_rev_recycle = jasper.data.rev_recycler:main",
             "jasper_data_server = jasper.data.server:main",
             "jasper_data_validation = jasper.data.validation.process:main",
             "jasper_data_preprocess = jasper.data.process:main",

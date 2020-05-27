@@ -93,7 +93,7 @@ def dump_validation_ui_data(
         def exec_func(f):
             return f()
 
-        with ThreadPoolExecutor(max_workers=20) as exe:
+        with ThreadPoolExecutor() as exe:
             print("starting all plot tasks")
             pnr_data = filter(
                 None,

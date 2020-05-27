@@ -15,7 +15,7 @@ def extract_data(
     verbose: bool = False,
 ):
     from pydub import AudioSegment
-    from .utils import ExtendedPath, asr_data_writer
+    from .utils import ExtendedPath, asr_data_writer, strip_silence
     from lenses import lens
 
     call_asr_data: Path = output_dir / Path("asr_data")
@@ -52,11 +52,15 @@ def extract_data(
                 end_time = state[i + 1]["AsrResult"]["Alternatives"][0]["StartTime"]
             else:
                 end_time = call_wav.duration_seconds
-            code_seg = call_wav[start_time * 1000 : end_time * 1000]
+            full_code_seg = call_wav[start_time * 1000 : end_time * 1000]
+            code_seg = strip_silence(full_code_seg)
             code_fb = BytesIO()
             code_seg.export(code_fb, format="wav")
             code_wav = code_fb.getvalue()
-            # only of some audio data is present yield it
+            # only starting 1 min audio has reliable alignment ignore rest
+            if start_time > 60:
+                break
+            # only if some reasonable audio data is present yield it
             if code_seg.duration_seconds >= 0.5:
                 yield transcript, code_seg.duration_seconds, code_wav
 
@@ -64,12 +68,14 @@ def extract_data(
         call_wav_0, call_wav_1 = call_wav.split_to_mono()
         asr_events = lens["Events"].Each()["Event"].Filter(contains_asr)
         call_evs_0 = asr_events.Filter(channel(0)).collect()(events)
-        call_evs_1 = asr_events.Filter(channel(1)).collect()(events)
+        # Ignoring agent channel events
+        # call_evs_1 = asr_events.Filter(channel(1)).collect()(events)
         if verbose:
             typer.echo(f"processing data points on {call_wav_fname}")
         call_data_0 = compute_endtime(call_wav_0, call_evs_0)
-        call_data_1 = compute_endtime(call_wav_1, call_evs_1)
-        return chain(call_data_0, call_data_1)
+        # Ignoring agent channel
+        # call_data_1 = compute_endtime(call_wav_1, call_evs_1)
+        return call_data_0  # chain(call_data_0, call_data_1)
 
     def generate_call_asr_data():
         full_asr_data = []
