@@ -63,6 +63,7 @@ def main(manifest: Path):
     asr_data = ui_config["data"]
     use_domain_asr = ui_config.get("use_domain_asr", True)
     annotation_only = ui_config.get("annotation_only", False)
+    enable_plots = ui_config.get("enable_plots", True)
     sample_no = st.get_current_cursor()
     if len(asr_data) - 1 < sample_no or sample_no < 0:
         print("Invalid samplno resetting to 0")
@@ -92,7 +93,8 @@ def main(manifest: Path):
             st.sidebar.title(f"Speller WER: {sample['domain_wer']:.2f}%")
         else:
             st.sidebar.title(f"Pretrained WER: {sample['pretrained_wer']:.2f}%")
-    st.sidebar.image(Path(sample["plot_path"]).read_bytes())
+    if enable_plots:
+        st.sidebar.image(Path(sample["plot_path"]).read_bytes())
     st.audio(Path(sample["audio_path"]).open("rb"))
     # set default to text
     corrected = sample["text"]
