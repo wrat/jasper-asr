@@ -88,7 +88,7 @@ def extract_data(
             - datetime.datetime(1900, 1, 1)
         ).total_seconds() * 1000
 
-    def asr_data_generator(wav_seg, wav_path, meta):
+    def dual_asr_data_generator(wav_seg, wav_path, meta):
         left_audio, right_audio = wav_seg.split_to_mono()
         channel_map = {"Agent": right_audio, "Client": left_audio}
         monologues = lens["monologues"].Each().collect()(meta)
@@ -113,9 +113,40 @@ def extract_data(
                 )
             except IndexError:
                 print(f'error when loading timestamp events in wav:{wav_path} skipping.')
+                continue
 
             # offset by 500 msec to include first vad? discarded audio
             full_tscript_wav_seg = speaker_channel[time_to_msecs(start_time) - 500 : time_to_msecs(end_time)]
+            tscript_wav_seg = strip_silence(full_tscript_wav_seg)
+            tscript_wav_fb = BytesIO()
+            tscript_wav_seg.export(tscript_wav_fb, format="wav")
+            tscript_wav = tscript_wav_fb.getvalue()
+            text = "".join(lens["elements"].Each()["value"].collect()(monologue))
+            text_clean = re.sub(r"\[.*\]", "", text)
+            yield text_clean, tscript_wav_seg.duration_seconds, tscript_wav
+
+    def mono_asr_data_generator(wav_seg, wav_path, meta):
+        monologues = lens["monologues"].Each().collect()(meta)
+        for monologue in monologues:
+            try:
+                start_time = (
+                    lens["elements"]
+                    .Each()
+                    .Filter(lambda x: "timestamp" in x)["timestamp"]
+                    .collect()(monologue)[0]
+                )
+                end_time = (
+                    lens["elements"]
+                    .Each()
+                    .Filter(lambda x: "end_timestamp" in x)["end_timestamp"]
+                    .collect()(monologue)[-1]
+                )
+            except IndexError:
+                print(f'error when loading timestamp events in wav:{wav_path} skipping.')
+                continue
+
+            # offset by 500 msec to include first vad? discarded audio
+            full_tscript_wav_seg = wav_seg[time_to_msecs(start_time) - 500 : time_to_msecs(end_time)]
             tscript_wav_seg = strip_silence(full_tscript_wav_seg)
             tscript_wav_fb = BytesIO()
             tscript_wav_seg.export(tscript_wav_fb, format="wav")
@@ -128,6 +159,9 @@ def extract_data(
         full_asr_data = []
         total_duration = 0
         for wav, wav_path, ev in wav_event_generator(call_audio_dir):
+            if wav.channels > 2:
+                print(f'skipping many channel audio {wav_path}')
+            asr_data_generator = mono_asr_data_generator if wav.channels == 1 else dual_asr_data_generator
             asr_data = asr_data_generator(wav, wav_path, ev)
             total_duration += wav.duration_seconds
             full_asr_data.append(asr_data)

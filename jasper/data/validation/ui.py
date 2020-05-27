@@ -61,14 +61,18 @@ def load_ui_data(validation_ui_data_path: Path):
 def main(manifest: Path):
     ui_config = load_ui_data(manifest)
     asr_data = ui_config["data"]
-    use_domain_asr = ui_config["use_domain_asr"]
+    use_domain_asr = ui_config.get("use_domain_asr", True)
+    annotation_only = ui_config.get("annotation_only", False)
     sample_no = st.get_current_cursor()
     if len(asr_data) - 1 < sample_no or sample_no < 0:
         print("Invalid samplno resetting to 0")
         st.update_cursor(0)
     sample = asr_data[sample_no]
     title_type = "Speller " if use_domain_asr else ""
-    st.title(f"ASR {title_type}Validation")
+    if annotation_only:
+        st.title(f"ASR Annotation")
+    else:
+        st.title(f"ASR {title_type}Validation")
     addl_text = f"spelled *{sample['spoken']}*" if use_domain_asr else ""
     st.markdown(f"{sample_no+1} of {len(asr_data)} : **{sample['text']}**" + addl_text)
     new_sample = st.number_input(
@@ -78,15 +82,16 @@ def main(manifest: Path):
         st.update_cursor(new_sample - 1)
     st.sidebar.title(f"Details: [{sample['real_idx']}]")
     st.sidebar.markdown(f"Gold Text: **{sample['text']}**")
-    if use_domain_asr:
-        st.sidebar.markdown(f"Expected Spelled: *{sample['spoken']}*")
-    st.sidebar.title("Results:")
-    st.sidebar.markdown(f"Pretrained: **{sample['pretrained_asr']}**")
-    if use_domain_asr:
-        st.sidebar.markdown(f"Domain: **{sample['domain_asr']}**")
-        st.sidebar.title(f"Speller WER: {sample['domain_wer']:.2f}%")
-    else:
-        st.sidebar.title(f"Pretrained WER: {sample['pretrained_wer']:.2f}%")
+    if not annotation_only:
+        if use_domain_asr:
+            st.sidebar.markdown(f"Expected Spelled: *{sample['spoken']}*")
+        st.sidebar.title("Results:")
+        st.sidebar.markdown(f"Pretrained: **{sample['pretrained_asr']}**")
+        if use_domain_asr:
+            st.sidebar.markdown(f"Domain: **{sample['domain_asr']}**")
+            st.sidebar.title(f"Speller WER: {sample['domain_wer']:.2f}%")
+        else:
+            st.sidebar.title(f"Pretrained WER: {sample['pretrained_wer']:.2f}%")
     st.sidebar.image(Path(sample["plot_path"]).read_bytes())
     st.audio(Path(sample["audio_path"]).open("rb"))
     # set default to text
@@ -113,10 +118,6 @@ def main(manifest: Path):
         st.markdown(
             f'Your Response: **{correction_entry["value"]["status"]}** Correction: **{correction_entry["value"]["correction"]}**'
         )
-    # if st.button("Previous Untagged"):
-    #     pass
-    # if st.button("Next Untagged"):
-    #     pass
     text_sample = st.text_input("Go to Text:", value='')
     if text_sample != '':
         candidates = [i for (i, p) in enumerate(asr_data) if p["text"] == text_sample or p["spoken"] == text_sample]

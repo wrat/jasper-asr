@@ -16,16 +16,12 @@ from ..utils import (
 app = typer.Typer()
 
 
-def preprocess_datapoint(idx, rel_root, sample, use_domain_asr):
+def preprocess_datapoint(idx, rel_root, sample, use_domain_asr, annotation_only):
     import matplotlib.pyplot as plt
     import librosa
     import librosa.display
     from pydub import AudioSegment
     from nemo.collections.asr.metrics import word_error_rate
-    from jasper.client import (
-        transcriber_pretrained,
-        transcriber_speller,
-    )
 
     try:
         res = dict(sample)
@@ -40,13 +36,18 @@ def preprocess_datapoint(idx, rel_root, sample, use_domain_asr):
             .set_sample_width(2)
             .set_frame_rate(24000)
         )
-        res["pretrained_asr"] = transcriber_pretrained(aud_seg.raw_data)
-        res["pretrained_wer"] = word_error_rate([res["text"]], [res["pretrained_asr"]])
-        if use_domain_asr:
-            res["domain_asr"] = transcriber_speller(aud_seg.raw_data)
-            res["domain_wer"] = word_error_rate(
-                [res["spoken"]], [res["pretrained_asr"]]
+        if not annotation_only:
+            from jasper.client import transcriber_pretrained, transcriber_speller
+
+            res["pretrained_asr"] = transcriber_pretrained(aud_seg.raw_data)
+            res["pretrained_wer"] = word_error_rate(
+                [res["text"]], [res["pretrained_asr"]]
             )
+            if use_domain_asr:
+                res["domain_asr"] = transcriber_speller(aud_seg.raw_data)
+                res["domain_wer"] = word_error_rate(
+                    [res["spoken"]], [res["pretrained_asr"]]
+                )
         wav_plot_path = (
             rel_root / Path("wav_plots") / Path(audio_path.name).with_suffix(".png")
         )
@@ -67,9 +68,14 @@ def preprocess_datapoint(idx, rel_root, sample, use_domain_asr):
 
 @app.command()
 def dump_validation_ui_data(
-    data_manifest_path: Path = Path("./data/asr_data/call_alphanum/manifest.json"),
-    dump_path: Path = Path("./data/valiation_data/ui_dump.json"),
+    data_manifest_path: Path = typer.Option(
+        Path("./data/asr_data/call_alphanum/manifest.json"), show_default=True
+    ),
+    dump_path: Path = typer.Option(
+        Path("./data/valiation_data/ui_dump.json"), show_default=True
+    ),
     use_domain_asr: bool = True,
+    annotation_only: bool = True,
 ):
     from concurrent.futures import ThreadPoolExecutor
     from functools import partial
@@ -86,6 +92,7 @@ def dump_validation_ui_data(
                 data_manifest_path.parent,
                 json.loads(v),
                 use_domain_asr,
+                annotation_only,
             )
             for i, v in enumerate(pnr_jsonl)
         ]
@@ -94,7 +101,7 @@ def dump_validation_ui_data(
             return f()
 
         with ThreadPoolExecutor() as exe:
-            print("starting all plot tasks")
+            print("starting all preprocess tasks")
             pnr_data = filter(
                 None,
                 list(
@@ -106,9 +113,16 @@ def dump_validation_ui_data(
                     )
                 ),
             )
-    wer_key = "domain_wer" if use_domain_asr else "pretrained_wer"
-    result = sorted(pnr_data, key=lambda x: x[wer_key], reverse=True)
-    ui_config = {"use_domain_asr": use_domain_asr, "data": result}
+    if annotation_only:
+        result = pnr_data
+    else:
+        wer_key = "domain_wer" if use_domain_asr else "pretrained_wer"
+        result = sorted(pnr_data, key=lambda x: x[wer_key], reverse=True)
+    ui_config = {
+        "use_domain_asr": use_domain_asr,
+        "data": result,
+        "annotation_only": annotation_only,
+    }
     ExtendedPath(dump_path).write_json(ui_config)
 
 
@@ -171,7 +185,9 @@ def update_corrections(
             elif d["chars"] in correction_map:
                 correct_text = correction_map[d["chars"]]
                 if skip_incorrect:
-                    print(f'skipping incorrect {d["audio_path"]} corrected to {correct_text}')
+                    print(
+                        f'skipping incorrect {d["audio_path"]} corrected to {correct_text}'
+                    )
                 else:
                     renamed_set.add(correct_text)
                     new_name = str(Path(correct_text).with_suffix(".wav"))
