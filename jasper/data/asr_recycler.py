@@ -59,10 +59,13 @@ def extract_data(
             code_wav = code_fb.getvalue()
             # only starting 1 min audio has reliable alignment ignore rest
             if start_time > 60:
+                print(f'start time over 60 seconds of audio skipping.')
                 break
             # only if some reasonable audio data is present yield it
-            if code_seg.duration_seconds >= 0.5:
-                yield transcript, code_seg.duration_seconds, code_wav
+            if code_seg.duration_seconds < 0.5:
+                print(f'transcript chunk "{transcript}" contains no audio skipping.')
+                continue
+            yield transcript, code_seg.duration_seconds, code_wav
 
     def asr_data_generator(call_wav, call_wav_fname, events):
         call_wav_0, call_wav_1 = call_wav.split_to_mono()

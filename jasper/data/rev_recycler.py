@@ -91,8 +91,10 @@ def extract_data(
             text = "".join(lens["elements"].Each()["value"].collect()(monologue))
             text_clean = re.sub(r"\[.*\]", "", text)
             # only if some reasonable audio data is present yield it
-            if tscript_wav_seg.duration_seconds >= 0.5:
-                yield text_clean, tscript_wav_seg.duration_seconds, tscript_wav
+            if tscript_wav_seg.duration_seconds < 0.5:
+                print(f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.')
+                continue
+            yield text_clean, tscript_wav_seg.duration_seconds, tscript_wav
 
     def mono_asr_data_generator(wav_seg, wav_path, meta):
         monologues = lens["monologues"].Each().collect()(meta)
@@ -122,6 +124,9 @@ def extract_data(
             tscript_wav = tscript_wav_fb.getvalue()
             text = "".join(lens["elements"].Each()["value"].collect()(monologue))
             text_clean = re.sub(r"\[.*\]", "", text)
+            if tscript_wav_seg.duration_seconds < 0.5:
+                print(f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.')
+                continue
             yield text_clean, tscript_wav_seg.duration_seconds, tscript_wav
 
     def generate_rev_asr_data():
