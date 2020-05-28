@@ -45,20 +45,28 @@ def split_data(dataset_path: Path, test_size: float = 0.1):
 
 @app.command()
 def validate_data(dataset_path: Path):
+    from natural.date import compress
+    from datetime import timedelta
+
     for mf_type in ["train_manifest.json", "test_manifest.json"]:
         data_file = dataset_path / Path(mf_type)
         print(f"validating {data_file}.")
         with Path(data_file).open("r") as pf:
             pnr_jsonl = pf.readlines()
+        duration = 0
         for (i, s) in enumerate(pnr_jsonl):
             try:
                 d = json.loads(s)
+                duration += d["duration"]
                 audio_file = data_file.parent / Path(d["audio_filepath"])
                 if not audio_file.exists():
                     raise OSError(f"File {audio_file} not found")
             except BaseException as e:
                 print(f'failed on {i} with "{e}"')
-        print(f"no errors found. seems like a valid {mf_type}.")
+        duration_str = compress(timedelta(seconds=duration), pad=" ")
+        print(
+            f"no errors found. seems like a valid {mf_type}. contains {duration_str}sec of audio"
+        )
 
 
 def main():

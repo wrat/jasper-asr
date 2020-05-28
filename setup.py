@@ -37,7 +37,8 @@ extra_requirements = {
         "matplotlib==3.2.1",
         "pydub~=0.24.0",
         "streamlit==0.58.0",
-        "stringcase==1.2.0"
+        "natural==0.2.0",
+        "stringcase==1.2.0",
     ]
     # "train": [
     #     "torchaudio==0.5.0",
