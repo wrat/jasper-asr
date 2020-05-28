@@ -34,7 +34,8 @@ def extract_data(
                 events = ExtendedPath(meta_path).read_json()
                 yield call_wav, wav_path, events
             else:
-                typer.echo(f"missing json corresponding to {wav_path}")
+                if verbose:
+                    typer.echo(f"missing json corresponding to {wav_path}")
 
     def contains_asr(x):
         return "AsrResult" in x
@@ -55,6 +56,19 @@ def extract_data(
             - datetime.datetime(1900, 1, 1)
         ).total_seconds() * 1000
 
+    def process_utterance_chunk(wav_seg, start_time, end_time, monologue):
+        # offset by 1sec left side to include vad? discarded audio
+        full_tscript_wav_seg = wav_seg[
+            time_to_msecs(start_time) - 1000 : time_to_msecs(end_time)  # + 1000
+        ]
+        tscript_wav_seg = strip_silence(full_tscript_wav_seg)
+        tscript_wav_fb = BytesIO()
+        tscript_wav_seg.export(tscript_wav_fb, format="wav")
+        tscript_wav = tscript_wav_fb.getvalue()
+        text = "".join(lens["elements"].Each()["value"].collect()(monologue))
+        text_clean = re.sub(r"\[.*\]", "", text)
+        return tscript_wav, tscript_wav_seg.duration_seconds, text_clean
+
     def dual_asr_data_generator(wav_seg, wav_path, meta):
         left_audio, right_audio = wav_seg.split_to_mono()
         channel_map = {"Agent": right_audio, "Client": left_audio}
@@ -64,7 +78,9 @@ def extract_data(
             speaker_channel = channel_map.get(monologue["speaker_name"])
             if not speaker_channel:
                 if verbose:
-                    print(f'unknown speaker tag {monologue["speaker_name"]} in wav:{wav_path} skipping.')
+                    print(
+                        f'unknown speaker tag {monologue["speaker_name"]} in wav:{wav_path} skipping.'
+                    )
                 continue
             try:
                 start_time = (
@@ -81,23 +97,20 @@ def extract_data(
                 )
             except IndexError:
                 if verbose:
-                    print(f'error when loading timestamp events in wav:{wav_path} skipping.')
+                    print(
+                        f"error when loading timestamp events in wav:{wav_path} skipping."
+                    )
                 continue
-
-            # offset by 500 msec to include first vad? discarded audio
-            full_tscript_wav_seg = speaker_channel[time_to_msecs(start_time) - 500 : time_to_msecs(end_time)]
-            tscript_wav_seg = strip_silence(full_tscript_wav_seg)
-            tscript_wav_fb = BytesIO()
-            tscript_wav_seg.export(tscript_wav_fb, format="wav")
-            tscript_wav = tscript_wav_fb.getvalue()
-            text = "".join(lens["elements"].Each()["value"].collect()(monologue))
-            text_clean = re.sub(r"\[.*\]", "", text)
-            # only if some reasonable audio data is present yield it
-            if tscript_wav_seg.duration_seconds < 0.5:
+            tscript_wav, seg_dur, text_clean = process_utterance_chunk(
+                speaker_channel, start_time, end_time, monologue
+            )
+            if seg_dur < 0.5:
                 if verbose:
-                    print(f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.')
+                    print(
+                        f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.'
+                    )
                 continue
-            yield text_clean, tscript_wav_seg.duration_seconds, tscript_wav
+            yield text_clean, seg_dur, tscript_wav
 
     def mono_asr_data_generator(wav_seg, wav_path, meta):
         monologues = lens["monologues"].Each().collect()(meta)
@@ -117,30 +130,33 @@ def extract_data(
                 )
             except IndexError:
                 if verbose:
-                    print(f'error when loading timestamp events in wav:{wav_path} skipping.')
+                    print(
+                        f"error when loading timestamp events in wav:{wav_path} skipping."
+                    )
                 continue
 
-            # offset by 500 msec to include first vad? discarded audio
-            full_tscript_wav_seg = wav_seg[time_to_msecs(start_time) - 500 : time_to_msecs(end_time)]
-            tscript_wav_seg = strip_silence(full_tscript_wav_seg)
-            tscript_wav_fb = BytesIO()
-            tscript_wav_seg.export(tscript_wav_fb, format="wav")
-            tscript_wav = tscript_wav_fb.getvalue()
-            text = "".join(lens["elements"].Each()["value"].collect()(monologue))
-            text_clean = re.sub(r"\[.*\]", "", text)
-            if tscript_wav_seg.duration_seconds < 0.5:
+            tscript_wav, seg_dur, text_clean = process_utterance_chunk(
+                wav_seg, start_time, end_time, monologue
+            )
+            if seg_dur < 0.5:
                 if verbose:
-                    print(f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.')
+                    print(
+                        f'transcript chunk "{text_clean}" contains no audio in {wav_path} skipping.'
+                    )
                 continue
-            yield text_clean, tscript_wav_seg.duration_seconds, tscript_wav
+            yield text_clean, seg_dur, tscript_wav
 
     def generate_rev_asr_data():
         full_asr_data = []
         total_duration = 0
         for wav, wav_path, ev in wav_event_generator(call_audio_dir):
             if wav.channels > 2:
-                print(f'skipping many channel audio {wav_path}')
-            asr_data_generator = mono_asr_data_generator if wav.channels == 1 else dual_asr_data_generator
+                print(f"skipping many channel audio {wav_path}")
+            asr_data_generator = (
+                mono_asr_data_generator
+                if wav.channels == 1
+                else dual_asr_data_generator
+            )
             asr_data = asr_data_generator(wav, wav_path, ev)
             total_duration += wav.duration_seconds
             full_asr_data.append(asr_data)

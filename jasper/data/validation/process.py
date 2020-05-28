@@ -122,7 +122,7 @@ def dump_validation_ui_data(
                 ),
             )
     if annotation_only:
-        result = pnr_data
+        result = list(pnr_data)
     else:
         wer_key = "domain_wer" if use_domain_asr else "pretrained_wer"
         result = sorted(pnr_data, key=lambda x: x[wer_key], reverse=True)
