@@ -37,9 +37,7 @@ def parse_args():
         lr=0.002,
         amp_opt_level="O1",
         create_tb_writer=True,
-        model_config="./train/jasper-speller10x5dr.yaml",
-        # train_dataset="./train/asr_data/train_manifest.json",
-        # eval_datasets="./train/asr_data/test_manifest.json",
+        model_config="./train/jasper10x5dr.yaml",
         work_dir="./train/work",
         num_epochs=300,
         weight_decay=0.005,
@@ -61,7 +59,6 @@ def parse_args():
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=None,
         required=False,
         help="number of epochs to train",
     )

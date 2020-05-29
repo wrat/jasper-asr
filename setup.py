@@ -8,7 +8,7 @@ requirements = [
 ]
 
 extra_requirements = {
-    "server": ["rpyc~=4.1.4"],
+    "server": ["rpyc~=4.1.4", "tqdm~=4.39.0"],
     "data": [
         "google-cloud-texttospeech~=1.0.1",
         "tqdm~=4.39.0",
