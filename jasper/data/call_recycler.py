@@ -163,15 +163,19 @@ def analyze(
     def get_data_points(utter_events, td_fn):
         data_points = []
         for evs in chunk_n(utter_events, 3):
-            assert evs[0]["Type"] == "CONV_RESULT"
-            assert evs[1]["Type"] == "STARTED_SPEAKING"
-            assert evs[2]["Type"] == "STOPPED_SPEAKING"
-            start_time = td_fn(evs[1]).total_seconds() - 1.5
-            end_time = td_fn(evs[2]).total_seconds()
-            code = evs[0]["Msg"]
-            data_points.append(
-                {"start_time": start_time, "end_time": end_time, "code": code}
-            )
+            try:
+                assert evs[0]["Type"] == "CONV_RESULT"
+                assert evs[1]["Type"] == "STARTED_SPEAKING"
+                assert evs[2]["Type"] == "STOPPED_SPEAKING"
+                start_time = td_fn(evs[1]).total_seconds() - 1.5
+                end_time = td_fn(evs[2]).total_seconds()
+                code = evs[0]["Msg"]
+                data_points.append(
+                    {"start_time": start_time, "end_time": end_time, "code": code}
+                )
+            except AssertionError:
+                # skipping invalid data_points
+                pass
         return data_points
 
     def process_call(call_obj):
