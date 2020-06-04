@@ -9,7 +9,7 @@ app = typer.Typer()
 
 
 if not hasattr(st, "mongo_connected"):
-    st.mongoclient = get_mongo_conn().test.asr_validation
+    st.mongoclient = get_mongo_conn(col='asr_validation')
     mongo_conn = st.mongoclient
 
     def current_cursor_fn():
@@ -111,9 +111,8 @@ def main(manifest: Path):
     if selected == "Inaudible":
         corrected = ""
     if st.button("Submit"):
-        correct_code = corrected.replace(" ", "").upper()
         st.update_entry(
-            sample["utterance_id"], {"status": selected, "correction": correct_code}
+            sample["utterance_id"], {"status": selected, "correction": corrected}
         )
         st.update_cursor(sample_no + 1)
     if correction_entry:

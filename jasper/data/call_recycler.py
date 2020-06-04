@@ -1,15 +1,7 @@
-# import argparse
-
-# import logging
 import typer
 from pathlib import Path
 
 app = typer.Typer()
-# leader_app = typer.Typer()
-# app.add_typer(leader_app, name="leaderboard")
-# plot_app = typer.Typer()
-# app.add_typer(plot_app, name="plot")
-
 
 @app.command()
 def export_all_logs(call_logs_file: Path = Path("./call_sia_logs.yaml")):
@@ -18,7 +10,7 @@ def export_all_logs(call_logs_file: Path = Path("./call_sia_logs.yaml")):
     from ruamel.yaml import YAML
 
     yaml = YAML()
-    mongo_coll = get_mongo_conn().test.calls
+    mongo_coll = get_mongo_conn()
     caller_calls = defaultdict(lambda: [])
     for call in mongo_coll.find():
         sysid = call["SystemID"]
@@ -46,7 +38,7 @@ def export_calls_between(
     from .utils import get_mongo_conn
 
     yaml = YAML()
-    mongo_coll = get_mongo_conn(port=mongo_port).test.calls
+    mongo_coll = get_mongo_conn(port=mongo_port)
     start_meta = mongo_coll.find_one({"SystemID": start_cid})
     end_meta = mongo_coll.find_one({"SystemID": end_cid})
 
@@ -77,23 +69,21 @@ def analyze(
     plot_calls: bool = False,
     extract_data: bool = False,
     download_only: bool = False,
-    call_logs_file: Path = Path("./call_logs.yaml"),
+    call_logs_file: Path = typer.Option(Path("./call_logs.yaml"), show_default=True),
     output_dir: Path = Path("./data"),
-    mongo_port: int = 27017,
+    data_name: str = None,
+    mongo_uri: str = typer.Option("mongodb://localhost:27017/test.calls", show_default=True),
 ):
 
     from urllib.parse import urlsplit
     from functools import reduce
     import boto3
-
     from io import BytesIO
     import json
     from ruamel.yaml import YAML
     import re
     from google.protobuf.timestamp_pb2 import Timestamp
     from datetime import timedelta
-
-    # from concurrent.futures import ThreadPoolExecutor
     import librosa
     import librosa.display
     from lenses import lens
@@ -102,23 +92,17 @@ def analyze(
     import matplotlib.pyplot as plt
     import matplotlib
     from tqdm import tqdm
-    from .utils import asr_data_writer, get_mongo_conn
+    from .utils import asr_data_writer, get_mongo_coll
     from pydub import AudioSegment
     from natural.date import compress
-
-    # from itertools import product, chain
 
     matplotlib.rcParams["agg.path.chunksize"] = 10000
 
     matplotlib.use("agg")
 
-    # logging.basicConfig(
-    #     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    # )
-    # logger = logging.getLogger(__name__)
     yaml = YAML()
     s3 = boto3.client("s3")
-    mongo_collection = get_mongo_conn(port=mongo_port).test.calls
+    mongo_collection = get_mongo_coll(mongo_uri)
     call_media_dir: Path = output_dir / Path("call_wavs")
     call_media_dir.mkdir(exist_ok=True, parents=True)
     call_meta_dir: Path = output_dir / Path("call_metas")
@@ -127,6 +111,7 @@ def analyze(
     call_plot_dir.mkdir(exist_ok=True, parents=True)
     call_asr_data: Path = output_dir / Path("asr_data")
     call_asr_data.mkdir(exist_ok=True, parents=True)
+    dataset_name = call_logs_file.stem if not data_name else data_name
 
     call_logs = yaml.load(call_logs_file.read_text())
 
@@ -183,7 +168,7 @@ def analyze(
         call_events = call_meta["Events"]
 
         def is_writer_uri_event(ev):
-            return ev["Author"] == "AUDIO_WRITER" and 's3://' in ev["Msg"]
+            return ev["Author"] == "AUDIO_WRITER" and "s3://" in ev["Msg"]
 
         writer_events = list(filter(is_writer_uri_event, call_events))
         s3_wav_url = re.search(r"(s3://.*)", writer_events[0]["Msg"]).groups(0)[0]
@@ -268,8 +253,10 @@ def analyze(
         meta = mongo_collection.find_one({"SystemID": cid})
         duration = meta["EndTS"] - meta["StartTS"]
         process_meta = process_call(meta)
-        data_points = get_data_points(process_meta['utter_events'], process_meta['first_event_fn'])
-        process_meta['data_points'] = data_points
+        data_points = get_data_points(
+            process_meta["utter_events"], process_meta["first_event_fn"]
+        )
+        process_meta["data_points"] = data_points
         return {"url": uri, "meta": meta, "duration": duration, "process": process_meta}
 
     def download_meta_audio():
@@ -355,7 +342,7 @@ def analyze(
                 for dp in gen_data_values(saved_wav_path, data_points):
                     yield dp
 
-        asr_data_writer(call_asr_data, "call_alphanum", data_source())
+        asr_data_writer(call_asr_data, dataset_name, data_source())
 
     def show_leaderboard():
         def compute_user_stats(call_stat):
@@ -383,14 +370,14 @@ def analyze(
         leader_board = leader_df.rename(
             columns={
                 "rank": "Rank",
-                "num_samples": "Codes",
+                "num_samples": "Count",
                 "name": "Name",
                 "samples_rate": "SpeechRate",
                 "duration_str": "Duration",
             }
-        )[["Rank", "Name", "Codes", "Duration"]]
+        )[["Rank", "Name", "Count", "Duration"]]
         print(
-            """ASR Speller Dataset Leaderboard  :
+            """ASR Dataset Leaderboard  :
 ---------------------------------"""
         )
         print(leader_board.to_string(index=False))

@@ -104,10 +104,16 @@ class ExtendedPath(type(Path())):
             return json.dump(data, jf, indent=2)
 
 
-def get_mongo_conn(host="", port=27017):
+def get_mongo_coll(uri="mongodb://localhost:27017/test.calls"):
+    ud = pymongo.uri_parser.parse_uri(uri)
+    conn = pymongo.MongoClient(uri)
+    return conn[ud['database']][ud['collection']]
+
+
+def get_mongo_conn(host="", port=27017, db="test", col="calls"):
     mongo_host = host if host else os.environ.get("MONGO_HOST", "localhost")
     mongo_uri = f"mongodb://{mongo_host}:{port}/"
-    return pymongo.MongoClient(mongo_uri)
+    return pymongo.MongoClient(mongo_uri)[db][col]
 
 
 def strip_silence(sound):
