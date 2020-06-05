@@ -76,10 +76,10 @@ def preprocess_datapoint(
 
 @app.command()
 def dump_validation_ui_data(
-    dataset_path: Path = typer.Option(
-        Path("./data/asr_data/call_alphanum"), show_default=True
-    ),
-    dump_name: str = typer.Option("ui_dump.json", show_default=True),
+    data_name: str = typer.Option("call_alphanum", show_default=True),
+    dataset_dir: Path = Path("./data/asr_data"),
+    dump_dir: Path = Path("./data/valiation_data"),
+    dump_fname: Path = typer.Option(Path("ui_dump.json"), show_default=True),
     use_domain_asr: bool = False,
     annotation_only: bool = False,
     enable_plots: bool = True,
@@ -87,8 +87,8 @@ def dump_validation_ui_data(
     from concurrent.futures import ThreadPoolExecutor
     from functools import partial
 
-    data_manifest_path = dataset_path / Path("manifest.json")
-    dump_path: Path = Path(f"./data/valiation_data/{dataset_path.stem}/{dump_name}")
+    data_manifest_path = dataset_dir / Path(data_name) / Path("manifest.json")
+    dump_path: Path = dump_dir / Path(data_name) / dump_fname
     plot_dir = data_manifest_path.parent / Path("wav_plots")
     plot_dir.mkdir(parents=True, exist_ok=True)
     typer.echo(f"Using data manifest:{data_manifest_path}")
@@ -134,15 +134,22 @@ def dump_validation_ui_data(
         "annotation_only": annotation_only,
         "enable_plots": enable_plots,
     }
+    typer.echo(f"Writing dump to {dump_path}")
     ExtendedPath(dump_path).write_json(ui_config)
 
 
 @app.command()
-def dump_corrections(dump_path: Path = Path("./data/valiation_data/corrections.json")):
-    col = get_mongo_conn(col='asr_validation')
+def dump_corrections(
+    data_name: str = typer.Option("call_alphanum", show_default=True),
+    dump_dir: Path = Path("./data/valiation_data"),
+    dump_fname: Path = Path("corrections.json"),
+):
+    dump_path = dump_dir / Path(data_name) / dump_fname
+    col = get_mongo_conn(col="asr_validation")
 
     cursor_obj = col.find({"type": "correction"}, projection={"_id": False})
     corrections = [c for c in cursor_obj]
+    typer.echo(f"Writing dump to {dump_path}")
     ExtendedPath(dump_path).write_json(corrections)
 
 
@@ -156,7 +163,7 @@ def fill_unannotated(
     annotated_codes = {c["code"] for c in corrections}
     all_codes = {c["gold_chars"] for c in processed_data}
     unann_codes = all_codes - annotated_codes
-    mongo_conn = get_mongo_conn(col='asr_validation')
+    mongo_conn = get_mongo_conn(col="asr_validation")
     for c in unann_codes:
         mongo_conn.find_one_and_update(
             {"type": "correction", "code": c},
@@ -234,7 +241,7 @@ def update_corrections(
 def clear_mongo_corrections():
     delete = typer.confirm("are you sure you want to clear mongo collection it?")
     if delete:
-        col = get_mongo_conn(col='asr_validation')
+        col = get_mongo_conn(col="asr_validation")
         col.delete_many({"type": "correction"})
         typer.echo("deleted mongo collection.")
     typer.echo("Aborted")

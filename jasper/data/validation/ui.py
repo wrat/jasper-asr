@@ -9,7 +9,7 @@ app = typer.Typer()
 
 
 if not hasattr(st, "mongo_connected"):
-    st.mongoclient = get_mongo_conn(col='asr_validation')
+    st.mongoclient = get_mongo_conn(col="asr_validation")
     mongo_conn = st.mongoclient
 
     def current_cursor_fn():
@@ -119,9 +119,13 @@ def main(manifest: Path):
         st.markdown(
             f'Your Response: **{correction_entry["value"]["status"]}** Correction: **{correction_entry["value"]["correction"]}**'
         )
-    text_sample = st.text_input("Go to Text:", value='')
-    if text_sample != '':
-        candidates = [i for (i, p) in enumerate(asr_data) if p["text"] == text_sample or p["spoken"] == text_sample]
+    text_sample = st.text_input("Go to Text:", value="")
+    if text_sample != "":
+        candidates = [
+            i
+            for (i, p) in enumerate(asr_data)
+            if p["text"] == text_sample or p["spoken"] == text_sample
+        ]
         if len(candidates) > 0:
             st.update_cursor(candidates[0])
     real_idx = st.number_input(
