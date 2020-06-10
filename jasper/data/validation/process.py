@@ -75,7 +75,7 @@ def preprocess_datapoint(
 
 
 @app.command()
-def dump_validation_ui_data(
+def dump_ui(
     data_name: str = typer.Option("call_alphanum", show_default=True),
     dataset_dir: Path = Path("./data/asr_data"),
     dump_dir: Path = Path("./data/valiation_data"),
@@ -155,9 +155,13 @@ def dump_corrections(
 
 @app.command()
 def fill_unannotated(
-    processed_data_path: Path = Path("./data/valiation_data/ui_dump.json"),
-    corrections_path: Path = Path("./data/valiation_data/corrections.json"),
+    data_name: str = typer.Option("call_alphanum", show_default=True),
+    dump_dir: Path = Path("./data/valiation_data"),
+    dump_file: Path = Path("ui_dump.json"),
+    corrections_file: Path = Path("corrections.json"),
 ):
+    processed_data_path = dump_dir / Path(data_name) / dump_file
+    corrections_path = dump_dir / Path(data_name) / corrections_file
     processed_data = json.load(processed_data_path.open())
     corrections = json.load(corrections_path.open())
     annotated_codes = {c["code"] for c in corrections}
@@ -174,10 +178,18 @@ def fill_unannotated(
 
 @app.command()
 def update_corrections(
-    data_manifest_path: Path = Path("./data/asr_data/call_alphanum/manifest.json"),
-    corrections_path: Path = Path("./data/valiation_data/corrections.json"),
+    data_name: str = typer.Option("call_alphanum", show_default=True),
+    dump_dir: Path = Path("./data/valiation_data"),
+    manifest_dir: Path = Path("./data/asr_data"),
+    manifest_file: Path = Path("manifest.json"),
+    corrections_file: Path = Path("corrections.json"),
+    # data_manifest_path: Path = Path("./data/asr_data/call_alphanum/manifest.json"),
+    # corrections_path: Path = Path("./data/valiation_data/corrections.json"),
     skip_incorrect: bool = True,
 ):
+    data_manifest_path = manifest_dir / Path(data_name) / manifest_file
+    corrections_path = manifest_dir / Path(data_name) / corrections_file
+
     def correct_manifest(manifest_data_gen, corrections_path):
         corrections = json.load(corrections_path.open())
         correct_set = {
