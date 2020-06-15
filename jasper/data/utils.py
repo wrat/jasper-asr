@@ -95,10 +95,12 @@ class ExtendedPath(type(Path())):
     """docstring for ExtendedPath."""
 
     def read_json(self):
+        print(f'reading json from {self}')
         with self.open("r") as jf:
             return json.load(jf)
 
     def write_json(self, data):
+        print(f'writing json to {self}')
         self.parent.mkdir(parents=True, exist_ok=True)
         with self.open("w") as jf:
             return json.dump(data, jf, indent=2)
