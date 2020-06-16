@@ -135,7 +135,6 @@ def dump_ui(
         "annotation_only": annotation_only,
         "enable_plots": enable_plots,
     }
-    typer.echo(f"Writing dump to {dump_path}")
     ExtendedPath(dump_path).write_json(ui_config)
 
 
@@ -150,7 +149,6 @@ def dump_corrections(
 
     cursor_obj = col.find({"type": "correction"}, projection={"_id": False})
     corrections = [c for c in cursor_obj]
-    typer.echo(f"Writing dump to {dump_path}")
     ExtendedPath(dump_path).write_json(corrections)
 
 

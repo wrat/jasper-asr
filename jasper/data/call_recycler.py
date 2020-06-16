@@ -215,7 +215,7 @@ def analyze(
                     assert evs[0]["Type"] == "CONV_RESULT"
                     assert evs[1]["Type"] == "STARTED_SPEAKING"
                     assert evs[2]["Type"] == "STOPPED_SPEAKING"
-                    start_time = td_fn(evs[1]).total_seconds() - 1.5
+                    start_time = td_fn(evs[1]).total_seconds() - 2
                     end_time = td_fn(evs[2]).total_seconds()
                     spoken = evs[0]["Msg"]
                     data_points.append(
