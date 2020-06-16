@@ -70,6 +70,43 @@ def export_calls_between(
         yaml.dump(output_yaml, yf)
 
 
+@app.command()
+def copy_metas(
+    call_logs_file: Path = typer.Option(Path("./call_logs.yaml"), show_default=True),
+    output_dir: Path = Path("./data"),
+    meta_dir: Path = Path("/tmp/call_metas"),
+):
+    from lenses import lens
+    from ruamel.yaml import YAML
+    from urllib.parse import urlsplit
+    from shutil import copy2
+
+    yaml = YAML()
+    call_logs = yaml.load(call_logs_file.read_text())
+
+    call_meta_dir: Path = output_dir / Path("call_metas")
+    call_meta_dir.mkdir(exist_ok=True, parents=True)
+    meta_dir.mkdir(exist_ok=True, parents=True)
+
+    def get_cid(uri):
+        return Path(urlsplit(uri).path).stem
+
+    def copy_meta(uri):
+        cid = get_cid(uri)
+        saved_meta_path = call_meta_dir / Path(f'{cid}.json')
+        dest_meta_path = meta_dir / Path(f'{cid}.json')
+        if not saved_meta_path.exists():
+            print(f"{saved_meta_path} not found")
+        copy2(saved_meta_path, dest_meta_path)
+
+    def download_meta_audio():
+        call_lens = lens["users"].Each()["calls"].Each()
+        call_lens.modify(copy_meta)(call_logs)
+
+    download_meta_audio()
+
+
+
 class ExtractionType(str, Enum):
     flow = "flow"
     data = "data"
@@ -190,7 +227,7 @@ def analyze(
             return data_points
 
         def text_extractor(spoken):
-            return re.search(r"'(.*)'", spoken).groups(0)[0] if len(spoken) > 6 else spoken
+            return re.search(r"'(.*)'", spoken).groups(0)[0] if len(spoken) > 6 and re.search(r"'(.*)'", spoken) else spoken
 
     elif extraction_type == ExtractionType.flow:
 
