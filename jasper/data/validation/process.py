@@ -194,6 +194,7 @@ def dump_corrections(
 
 @app.command()
 def caller_quality(
+    task_uid: str,
     data_name: str = typer.Option("call_upwork_train_cnd", show_default=True),
     dump_dir: Path = Path("./data/asr_data"),
     dump_fname: Path = Path("ui_dump.json"),
@@ -214,7 +215,11 @@ def caller_quality(
         dp["valid"] = c["value"]["status"] == "Correct"
         return dp
 
-    corrected_dump = [correction_dp(c) for c in correction_data]
+    corrected_dump = [
+        correction_dp(c)
+        for c in correction_data
+        if c["task_id"].rsplit("-", 1)[1] == task_uid
+    ]
     df = pd.DataFrame(corrected_dump)
     print(f"Total samples: {len(df)}")
     for (c, g) in df.groupby("caller"):

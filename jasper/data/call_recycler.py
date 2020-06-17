@@ -121,6 +121,7 @@ def analyze(
     ),
     start_delay: float = 1.5,
     download_only: bool = False,
+    strip_silent_chunks: bool = True,
     call_logs_file: Path = typer.Option(Path("./call_logs.yaml"), show_default=True),
     output_dir: Path = Path("./data"),
     data_name: str = None,
@@ -408,6 +409,16 @@ def analyze(
         pprint(call_plots)
 
     def extract_data_points():
+        if strip_silent_chunks:
+
+            def audio_process(seg):
+                return strip_silence(seg)
+
+        else:
+
+            def audio_process(seg):
+                return seg
+
         def gen_data_values(saved_wav_path, data_points, caller_name):
             call_seg = (
                 AudioSegment.from_wav(saved_wav_path)
@@ -417,12 +428,15 @@ def analyze(
             )
             for dp_id, dp in enumerate(data_points):
                 start, end, spoken = dp["start_time"], dp["end_time"], dp["code"]
-                spoken_seg = strip_silence(call_seg[start * 1000 : end * 1000])
+                spoken_seg = audio_process(call_seg[start * 1000 : end * 1000])
                 spoken_fb = BytesIO()
                 spoken_seg.export(spoken_fb, format="wav")
                 spoken_wav = spoken_fb.getvalue()
                 # search for actual pnr code and handle plain codes as well
                 extracted_code = text_extractor(spoken)
+                if strip_silent_chunks and spoken_seg.duration_seconds < 0.5:
+                    print(f'transcript chunk "{spoken}" contains no audio skipping.')
+                    continue
                 yield extracted_code, spoken_seg.duration_seconds, spoken_wav, caller_name, spoken_seg
 
         call_lens = lens["users"].Each()["calls"].Each()
