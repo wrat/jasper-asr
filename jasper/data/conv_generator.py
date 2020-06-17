@@ -2,6 +2,7 @@ import typer
 from pathlib import Path
 from random import randrange
 from itertools import product
+from math import floor
 
 app = typer.Typer()
 
@@ -33,7 +34,10 @@ def export_conv_json(
     # ordinal from https://stackoverflow.com/questions/9647202/ordinal-numbers-replacement
 
     def ordinal(n):
-        return "%d%s" % (n, "tsnrhtdd"[(n / 10 % 10 != 1) * (n % 10 < 4) * n % 10 :: 4])
+        return "%d%s" % (
+            n,
+            "tsnrhtdd"[(floor(n / 10) % 10 != 1) * (n % 10 < 4) * n % 10 :: 4],
+        )
 
     def canon_vars(d, m):
         return [
