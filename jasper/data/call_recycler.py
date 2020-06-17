@@ -119,7 +119,7 @@ def analyze(
     extraction_type: ExtractionType = typer.Option(
         ExtractionType.data, show_default=True
     ),
-    start_delay: float = 3,
+    start_delay: float = 1.5,
     download_only: bool = False,
     call_logs_file: Path = typer.Option(Path("./call_logs.yaml"), show_default=True),
     output_dir: Path = Path("./data"),
@@ -146,7 +146,7 @@ def analyze(
     import matplotlib.pyplot as plt
     import matplotlib
     from tqdm import tqdm
-    from .utils import ui_dump_manifest_writer, get_mongo_coll
+    from .utils import ui_dump_manifest_writer, strip_silence, get_mongo_coll
     from pydub import AudioSegment
     from natural.date import compress
 
@@ -417,7 +417,7 @@ def analyze(
             )
             for dp_id, dp in enumerate(data_points):
                 start, end, spoken = dp["start_time"], dp["end_time"], dp["code"]
-                spoken_seg = call_seg[start * 1000 : end * 1000]
+                spoken_seg = strip_silence(call_seg[start * 1000 : end * 1000])
                 spoken_fb = BytesIO()
                 spoken_seg.export(spoken_fb, format="wav")
                 spoken_wav = spoken_fb.getvalue()
