@@ -3,6 +3,7 @@
 /train/
 .env*
 *.yaml
+*.yml
 *.json
 
 

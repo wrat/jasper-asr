@@ -12,6 +12,7 @@ from ..utils import (
     asr_manifest_reader,
     asr_manifest_writer,
     get_mongo_conn,
+    plot_seg,
 )
 
 app = typer.Typer()
@@ -20,9 +21,6 @@ app = typer.Typer()
 def preprocess_datapoint(
     idx, rel_root, sample, use_domain_asr, annotation_only, enable_plots
 ):
-    import matplotlib.pyplot as plt
-    import librosa
-    import librosa.display
     from pydub import AudioSegment
     from nemo.collections.asr.metrics import word_error_rate
     from jasper.client import transcribe_gen
@@ -61,14 +59,7 @@ def preprocess_datapoint(
                 rel_root / Path("wav_plots") / Path(audio_path.name).with_suffix(".png")
             )
             if not wav_plot_path.exists():
-                fig = plt.Figure()
-                ax = fig.add_subplot()
-                (y, sr) = librosa.load(audio_path)
-                librosa.display.waveplot(y=y, sr=sr, ax=ax)
-                with wav_plot_path.open("wb") as wav_plot_f:
-                    fig.set_tight_layout(True)
-                    fig.savefig(wav_plot_f, format="png", dpi=50)
-                    # fig.close()
+                plot_seg(wav_plot_path, audio_path)
             res["plot_path"] = str(wav_plot_path)
         return res
     except BaseException as e:
@@ -131,17 +122,66 @@ def dump_ui(
         result = sorted(pnr_data, key=lambda x: x[wer_key], reverse=True)
     ui_config = {
         "use_domain_asr": use_domain_asr,
-        "data": result,
         "annotation_only": annotation_only,
         "enable_plots": enable_plots,
+        "data": result,
     }
     ExtendedPath(dump_path).write_json(ui_config)
 
 
 @app.command()
+def sample_ui(
+    data_name: str = typer.Option("call_upwork_train_cnd", show_default=True),
+    dump_dir: Path = Path("./data/asr_data"),
+    dump_file: Path = Path("ui_dump.json"),
+    sample_count: int = typer.Option(80, show_default=True),
+    sample_file: Path = Path("sample_dump.json"),
+):
+    import pandas as pd
+
+    processed_data_path = dump_dir / Path(data_name) / dump_file
+    sample_path = dump_dir / Path(data_name) / sample_file
+    processed_data = ExtendedPath(processed_data_path).read_json()
+    df = pd.DataFrame(processed_data["data"])
+    samples_per_caller = sample_count // len(df["caller"].unique())
+    caller_samples = pd.concat(
+        [g.sample(samples_per_caller) for (c, g) in df.groupby("caller")]
+    )
+    caller_samples = caller_samples.reset_index(drop=True)
+    caller_samples["real_idx"] = caller_samples.index
+    sample_data = caller_samples.to_dict("records")
+    processed_data["data"] = sample_data
+    typer.echo(f"sampling {sample_count} datapoints")
+    ExtendedPath(sample_path).write_json(processed_data)
+
+
+@app.command()
+def task_ui(
+    data_name: str = typer.Option("call_upwork_train_cnd", show_default=True),
+    dump_dir: Path = Path("./data/asr_data"),
+    dump_file: Path = Path("ui_dump.json"),
+    task_count: int = typer.Option(4, show_default=True),
+    task_file: str = "task_dump",
+):
+    import pandas as pd
+    import numpy as np
+
+    processed_data_path = dump_dir / Path(data_name) / dump_file
+    processed_data = ExtendedPath(processed_data_path).read_json()
+    df = pd.DataFrame(processed_data["data"]).sample(frac=1).reset_index(drop=True)
+    for t_idx, task_f in enumerate(np.array_split(df, task_count)):
+        task_f = task_f.reset_index(drop=True)
+        task_f["real_idx"] = task_f.index
+        task_data = task_f.to_dict("records")
+        processed_data["data"] = task_data
+        task_path = dump_dir / Path(data_name) / Path(task_file + f"-{t_idx}.json")
+        ExtendedPath(task_path).write_json(processed_data)
+
+
+@app.command()
 def dump_corrections(
     data_name: str = typer.Option("call_alphanum", show_default=True),
-    dump_dir: Path = Path("./data/valiation_data"),
+    dump_dir: Path = Path("./data/asr_data"),
     dump_fname: Path = Path("corrections.json"),
 ):
     dump_path = dump_dir / Path(data_name) / dump_fname
@@ -150,6 +190,38 @@ def dump_corrections(
     cursor_obj = col.find({"type": "correction"}, projection={"_id": False})
     corrections = [c for c in cursor_obj]
     ExtendedPath(dump_path).write_json(corrections)
+
+
+@app.command()
+def caller_quality(
+    data_name: str = typer.Option("call_upwork_train_cnd", show_default=True),
+    dump_dir: Path = Path("./data/asr_data"),
+    dump_fname: Path = Path("ui_dump.json"),
+    correction_fname: Path = Path("corrections.json"),
+):
+    import copy
+    import pandas as pd
+
+    dump_path = dump_dir / Path(data_name) / dump_fname
+    correction_path = dump_dir / Path(data_name) / correction_fname
+    dump_data = ExtendedPath(dump_path).read_json()
+
+    dump_map = {d["utterance_id"]: d for d in dump_data["data"]}
+    correction_data = ExtendedPath(correction_path).read_json()
+
+    def correction_dp(c):
+        dp = copy.deepcopy(dump_map[c["code"]])
+        dp["valid"] = c["value"]["status"] == "Correct"
+        return dp
+
+    corrected_dump = [correction_dp(c) for c in correction_data]
+    df = pd.DataFrame(corrected_dump)
+    print(f"Total samples: {len(df)}")
+    for (c, g) in df.groupby("caller"):
+        total = len(g)
+        valid = len(g[g["valid"] == True])
+        valid_rate = valid * 100 / total
+        print(f"Caller: {c} Valid%:{valid_rate:.2f} of {total} samples")
 
 
 @app.command()
@@ -329,7 +401,9 @@ def clear_mongo_corrections():
     if delete:
         col = get_mongo_conn(col="asr_validation")
         col.delete_many({"type": "correction"})
+        col.delete_many({"type": "current_cursor"})
         typer.echo("deleted mongo collection.")
+        return
     typer.echo("Aborted")
 
 

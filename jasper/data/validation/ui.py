@@ -2,6 +2,7 @@ from pathlib import Path
 
 import streamlit as st
 import typer
+from uuid import uuid4
 from ..utils import ExtendedPath, get_mongo_conn
 from .st_rerun import rerun
 
@@ -11,25 +12,25 @@ app = typer.Typer()
 if not hasattr(st, "mongo_connected"):
     st.mongoclient = get_mongo_conn(col="asr_validation")
     mongo_conn = st.mongoclient
+    st.task_id = str(uuid4())
 
     def current_cursor_fn():
         # mongo_conn = st.mongoclient
-        cursor_obj = mongo_conn.find_one({"type": "current_cursor"})
+        cursor_obj = mongo_conn.find_one(
+            {"type": "current_cursor", "task_id": st.task_id}
+        )
         cursor_val = cursor_obj["cursor"]
         return cursor_val
 
     def update_cursor_fn(val=0):
         mongo_conn.find_one_and_update(
-            {"type": "current_cursor"},
-            {"$set": {"type": "current_cursor", "cursor": val}},
+            {"type": "current_cursor", "task_id": st.task_id},
+            {"$set": {"type": "current_cursor", "task_id": st.task_id, "cursor": val}},
             upsert=True,
         )
         rerun()
 
     def get_correction_entry_fn(code):
-        # mongo_conn = st.mongoclient
-        # cursor_obj = mongo_conn.find_one({"type": "correction", "code": code})
-        # cursor_val = cursor_obj["cursor"]
         return mongo_conn.find_one(
             {"type": "correction", "code": code}, projection={"_id": False}
         )
@@ -37,18 +38,25 @@ if not hasattr(st, "mongo_connected"):
     def update_entry_fn(code, value):
         mongo_conn.find_one_and_update(
             {"type": "correction", "code": code},
-            {"$set": {"value": value}},
+            {"$set": {"value": value, "task_id": st.task_id}},
             upsert=True,
         )
 
-    cursor_obj = mongo_conn.find_one({"type": "current_cursor"})
-    if not cursor_obj:
-        update_cursor_fn(0)
+    def set_task_fn(mf_path):
+        task_path = mf_path.parent / Path(f"task-{st.task_id}.lck")
+        if not task_path.exists():
+            print(f"creating task lock at {task_path}")
+            task_path.touch()
+
     st.get_current_cursor = current_cursor_fn
     st.update_cursor = update_cursor_fn
     st.get_correction_entry = get_correction_entry_fn
     st.update_entry = update_entry_fn
+    st.set_task = set_task_fn
     st.mongo_connected = True
+    cursor_obj = mongo_conn.find_one({"type": "current_cursor", "task_id": st.task_id})
+    if not cursor_obj:
+        update_cursor_fn(0)
 
 
 @st.cache()
@@ -59,6 +67,7 @@ def load_ui_data(validation_ui_data_path: Path):
 
 @app.command()
 def main(manifest: Path):
+    st.set_task(manifest)
     ui_config = load_ui_data(manifest)
     asr_data = ui_config["data"]
     use_domain_asr = ui_config.get("use_domain_asr", True)
@@ -70,10 +79,11 @@ def main(manifest: Path):
         st.update_cursor(0)
     sample = asr_data[sample_no]
     title_type = "Speller " if use_domain_asr else ""
+    task_uid = st.task_id.rsplit("-", 1)[1]
     if annotation_only:
-        st.title(f"ASR Annotation")
+        st.title(f"ASR Annotation - # {task_uid}")
     else:
-        st.title(f"ASR {title_type}Validation")
+        st.title(f"ASR {title_type}Validation - # {task_uid}")
     addl_text = f"spelled *{sample['spoken']}*" if use_domain_asr else ""
     st.markdown(f"{sample_no+1} of {len(asr_data)} : **{sample['text']}**" + addl_text)
     new_sample = st.number_input(
@@ -88,6 +98,8 @@ def main(manifest: Path):
             st.sidebar.markdown(f"Expected Spelled: *{sample['spoken']}*")
         st.sidebar.title("Results:")
         st.sidebar.markdown(f"Pretrained: **{sample['pretrained_asr']}**")
+        if "caller" in sample:
+            st.sidebar.markdown(f"Caller: **{sample['caller']}**")
         if use_domain_asr:
             st.sidebar.markdown(f"Domain: **{sample['domain_asr']}**")
             st.sidebar.title(f"Speller WER: {sample['domain_wer']:.2f}%")

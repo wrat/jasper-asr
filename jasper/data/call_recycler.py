@@ -93,8 +93,8 @@ def copy_metas(
 
     def copy_meta(uri):
         cid = get_cid(uri)
-        saved_meta_path = call_meta_dir / Path(f'{cid}.json')
-        dest_meta_path = meta_dir / Path(f'{cid}.json')
+        saved_meta_path = call_meta_dir / Path(f"{cid}.json")
+        dest_meta_path = meta_dir / Path(f"{cid}.json")
         if not saved_meta_path.exists():
             print(f"{saved_meta_path} not found")
         copy2(saved_meta_path, dest_meta_path)
@@ -104,7 +104,6 @@ def copy_metas(
         call_lens.modify(copy_meta)(call_logs)
 
     download_meta_audio()
-
 
 
 class ExtractionType(str, Enum):
@@ -120,6 +119,7 @@ def analyze(
     extraction_type: ExtractionType = typer.Option(
         ExtractionType.data, show_default=True
     ),
+    start_delay: float = 3,
     download_only: bool = False,
     call_logs_file: Path = typer.Option(Path("./call_logs.yaml"), show_default=True),
     output_dir: Path = Path("./data"),
@@ -146,7 +146,7 @@ def analyze(
     import matplotlib.pyplot as plt
     import matplotlib
     from tqdm import tqdm
-    from .utils import asr_data_writer, get_mongo_coll
+    from .utils import ui_dump_manifest_writer, get_mongo_coll
     from pydub import AudioSegment
     from natural.date import compress
 
@@ -215,7 +215,7 @@ def analyze(
                     assert evs[0]["Type"] == "CONV_RESULT"
                     assert evs[1]["Type"] == "STARTED_SPEAKING"
                     assert evs[2]["Type"] == "STOPPED_SPEAKING"
-                    start_time = td_fn(evs[1]).total_seconds() - 2
+                    start_time = td_fn(evs[1]).total_seconds() - start_delay
                     end_time = td_fn(evs[2]).total_seconds()
                     spoken = evs[0]["Msg"]
                     data_points.append(
@@ -227,7 +227,11 @@ def analyze(
             return data_points
 
         def text_extractor(spoken):
-            return re.search(r"'(.*)'", spoken).groups(0)[0] if len(spoken) > 6 and re.search(r"'(.*)'", spoken) else spoken
+            return (
+                re.search(r"'(.*)'", spoken).groups(0)[0]
+                if len(spoken) > 6 and re.search(r"'(.*)'", spoken)
+                else spoken
+            )
 
     elif extraction_type == ExtractionType.flow:
 
@@ -254,14 +258,20 @@ def analyze(
                     assert evs[1]["Type"] == "STARTED_SPEAKING"
                     assert evs[2]["Type"] == "ASR_RESULT"
                     assert evs[3]["Type"] == "STOPPED_SPEAKING"
-                    start_time = td_fn(evs[1]).total_seconds() - 1.5
+                    start_time = td_fn(evs[1]).total_seconds() - start_delay
                     end_time = td_fn(evs[2]).total_seconds()
                     conv_msg = evs[0]["Msg"]
-                    if 'full name' in conv_msg.lower():
+                    if "full name" in conv_msg.lower():
                         pld = json.loads(evs[2]["Payload"])
-                        spoken = pld["AsrResult"]["Results"][0]["Alternatives"][0]['Transcript']
+                        spoken = pld["AsrResult"]["Results"][0]["Alternatives"][0][
+                            "Transcript"
+                        ]
                         data_points.append(
-                            {"start_time": start_time, "end_time": end_time, "code": spoken}
+                            {
+                                "start_time": start_time,
+                                "end_time": end_time,
+                                "code": spoken,
+                            }
                         )
                 except AssertionError:
                     # skipping invalid data_points
@@ -330,6 +340,25 @@ def analyze(
         process_meta["data_points"] = data_points
         return {"url": uri, "meta": meta, "duration": duration, "process": process_meta}
 
+    def retrieve_callmeta(call_uri):
+        uri = call_uri["call_uri"]
+        name = call_uri["name"]
+        cid = get_cid(uri)
+        meta = mongo_collection.find_one({"SystemID": cid})
+        duration = meta["EndTS"] - meta["StartTS"]
+        process_meta = process_call(meta)
+        data_points = get_data_points(
+            process_meta["utter_events"], process_meta["first_event_fn"]
+        )
+        process_meta["data_points"] = data_points
+        return {
+            "url": uri,
+            "name": name,
+            "meta": meta,
+            "duration": duration,
+            "process": process_meta,
+        }
+
     def download_meta_audio():
         call_lens = lens["users"].Each()["calls"].Each()
         call_lens.modify(ensure_call)(call_logs)
@@ -379,7 +408,7 @@ def analyze(
         pprint(call_plots)
 
     def extract_data_points():
-        def gen_data_values(saved_wav_path, data_points):
+        def gen_data_values(saved_wav_path, data_points, caller_name):
             call_seg = (
                 AudioSegment.from_wav(saved_wav_path)
                 .set_channels(1)
@@ -394,23 +423,32 @@ def analyze(
                 spoken_wav = spoken_fb.getvalue()
                 # search for actual pnr code and handle plain codes as well
                 extracted_code = text_extractor(spoken)
-                yield extracted_code, spoken_seg.duration_seconds, spoken_wav
+                yield extracted_code, spoken_seg.duration_seconds, spoken_wav, caller_name, spoken_seg
 
         call_lens = lens["users"].Each()["calls"].Each()
-        call_stats = call_lens.modify(retrieve_processed_callmeta)(call_logs)
+
+        def assign_user_call(uc):
+            return (
+                lens["calls"]
+                .Each()
+                .modify(lambda c: {"call_uri": c, "name": uc["name"]})(uc)
+            )
+
+        user_call_logs = lens["users"].Each().modify(assign_user_call)(call_logs)
+        call_stats = call_lens.modify(retrieve_callmeta)(user_call_logs)
         call_objs = call_lens.collect()(call_stats)
 
         def data_source():
             for call_obj in tqdm(call_objs):
-                saved_wav_path, data_points, sys_id = (
+                saved_wav_path, data_points, name = (
                     call_obj["process"]["wav_path"],
                     call_obj["process"]["data_points"],
-                    call_obj["meta"]["SystemID"],
+                    call_obj["name"],
                 )
-                for dp in gen_data_values(saved_wav_path, data_points):
+                for dp in gen_data_values(saved_wav_path, data_points, name):
                     yield dp
 
-        asr_data_writer(call_asr_data, dataset_name, data_source())
+        ui_dump_manifest_writer(call_asr_data, dataset_name, data_source())
 
     def show_leaderboard():
         def compute_user_stats(call_stat):
