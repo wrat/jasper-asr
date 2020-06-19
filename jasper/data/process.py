@@ -23,7 +23,7 @@ def fixate_data(dataset_path: Path):
 
 
 @app.command()
-def augment_datasets(src_dataset_paths: List[Path], dest_dataset_path: Path):
+def augment_data(src_dataset_paths: List[Path], dest_dataset_path: Path):
     reader_list = []
     abs_manifest_path = Path("abs_manifest.json")
     for dataset_path in src_dataset_paths:

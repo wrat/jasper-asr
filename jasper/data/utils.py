@@ -59,6 +59,10 @@ def alnum_to_asr_tokens(text):
     return ("".join(num_tokens)).lower()
 
 
+def tscript_uuid_fname(transcript):
+    return str(uuid4()) + "_" + slugify(transcript, max_length=8)
+
+
 def asr_data_writer(output_dir, dataset_name, asr_data_source, verbose=False):
     dataset_dir = output_dir / Path(dataset_name)
     (dataset_dir / Path("wav")).mkdir(parents=True, exist_ok=True)
@@ -67,7 +71,7 @@ def asr_data_writer(output_dir, dataset_name, asr_data_source, verbose=False):
     with asr_manifest.open("w") as mf:
         print(f"writing manifest to {asr_manifest}")
         for transcript, audio_dur, wav_data in asr_data_source:
-            fname = str(uuid4()) + "_" + slugify(transcript, max_length=8)
+            fname = tscript_uuid_fname(transcript)
             audio_file = dataset_dir / Path("wav") / Path(fname).with_suffix(".wav")
             audio_file.write_bytes(wav_data)
             rel_pnr_path = audio_file.relative_to(dataset_dir)
@@ -174,7 +178,7 @@ def asr_manifest_reader(data_manifest_path: Path):
     pnr_data = [json.loads(v) for v in pnr_jsonl]
     for p in pnr_data:
         p["audio_path"] = data_manifest_path.parent / Path(p["audio_filepath"])
-        p["chars"] = Path(p["audio_filepath"]).stem
+        p["text"] = p["text"].strip()
         yield p
 
 

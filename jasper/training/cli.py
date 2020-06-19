@@ -41,7 +41,7 @@ def parse_args():
         work_dir="./train/work",
         num_epochs=300,
         weight_decay=0.005,
-        checkpoint_save_freq=200,
+        checkpoint_save_freq=100,
         eval_freq=100,
         load_dir="./train/models/jasper/",
         warmup_steps=3,
@@ -266,6 +266,7 @@ def create_all_dags(args, neural_factory):
         folder=neural_factory.checkpoint_dir,
         load_from_folder=args.load_dir,
         step_freq=args.checkpoint_save_freq,
+        checkpoints_to_keep=30,
     )
 
     callbacks = [train_callback, chpt_callback]
