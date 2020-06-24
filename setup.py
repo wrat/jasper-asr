@@ -65,6 +65,7 @@ setup(
             "jasper_trainer = jasper.training.cli:main",
             "jasper_data_tts_generate = jasper.data.tts_generator:main",
             "jasper_data_conv_generate = jasper.data.conv_generator:main",
+            "jasper_data_nlu_generate = jasper.data.nlu_generator:main",
             "jasper_data_call_recycle = jasper.data.call_recycler:main",
             "jasper_data_asr_recycle = jasper.data.asr_recycler:main",
             "jasper_data_rev_recycle = jasper.data.rev_recycler:main",

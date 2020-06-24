@@ -1,13 +1,17 @@
-import numpy as np
-import wave
 import io
 import os
 import json
+import wave
 from pathlib import Path
+from itertools import product
+from functools import partial
+from math import floor
+from uuid import uuid4
+from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
 import pymongo
 from slugify import slugify
-from uuid import uuid4
 from num2words import num2words
 from jasper.client import transcribe_gen
 from nemo.collections.asr.metrics import word_error_rate
@@ -15,8 +19,6 @@ import matplotlib.pyplot as plt
 import librosa
 import librosa.display
 from tqdm import tqdm
-from functools import partial
-from concurrent.futures import ThreadPoolExecutor
 
 
 def manifest_str(path, dur, text):
@@ -236,6 +238,44 @@ def plot_seg(wav_plot_path, audio_path):
     with wav_plot_path.open("wb") as wav_plot_f:
         fig.set_tight_layout(True)
         fig.savefig(wav_plot_f, format="png", dpi=50)
+
+
+def generate_dates():
+
+    days = [i for i in range(1, 32)]
+    months = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ]
+    # ordinal from https://stackoverflow.com/questions/9647202/ordinal-numbers-replacement
+
+    def ordinal(n):
+        return "%d%s" % (
+            n,
+            "tsnrhtdd"[(floor(n / 10) % 10 != 1) * (n % 10 < 4) * n % 10 :: 4],
+        )
+
+    def canon_vars(d, m):
+        return [
+            ordinal(d) + " " + m,
+            m + " " + ordinal(d),
+            ordinal(d) + " of " + m,
+            m + " the " + ordinal(d),
+            str(d) + " " + m,
+            m + " " + str(d),
+        ]
+
+    return [dm for d, m in product(days, months) for dm in canon_vars(d, m)]
 
 
 def main():
