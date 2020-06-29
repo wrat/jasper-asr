@@ -147,7 +147,7 @@ def analyze(
     import matplotlib.pyplot as plt
     import matplotlib
     from tqdm import tqdm
-    from .utils import ui_dump_manifest_writer, strip_silence, get_mongo_coll
+    from .utils import ui_dump_manifest_writer, strip_silence, get_mongo_coll, get_call_logs
     from pydub import AudioSegment
     from natural.date import compress
 
@@ -169,18 +169,6 @@ def analyze(
     dataset_name = call_logs_file.stem if not data_name else data_name
 
     call_logs = yaml.load(call_logs_file.read_text())
-
-    def get_call_meta(call_obj):
-        meta_s3_uri = call_obj["DataURI"]
-        s3_event_url_p = urlsplit(meta_s3_uri)
-        saved_meta_path = call_meta_dir / Path(Path(s3_event_url_p.path).name)
-        if not saved_meta_path.exists():
-            print(f"downloading : {saved_meta_path} from {meta_s3_uri}")
-            s3.download_file(
-                s3_event_url_p.netloc, s3_event_url_p.path[1:], str(saved_meta_path)
-            )
-        call_metas = json.load(saved_meta_path.open())
-        return call_metas
 
     def gen_ev_fev_timedelta(fev):
         fev_p = Timestamp()
@@ -283,7 +271,7 @@ def analyze(
             return spoken
 
     def process_call(call_obj):
-        call_meta = get_call_meta(call_obj)
+        call_meta = get_call_logs(call_obj, s3, call_meta_dir)
         call_events = call_meta["Events"]
 
         def is_writer_uri_event(ev):

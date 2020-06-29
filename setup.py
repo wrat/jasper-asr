@@ -39,6 +39,7 @@ extra_requirements = {
         "streamlit==0.58.0",
         "natural==0.2.0",
         "stringcase==1.2.0",
+        "google-cloud-speech~=1.3.1",
     ]
     # "train": [
     #     "torchaudio==0.5.0",
@@ -66,12 +67,14 @@ setup(
             "jasper_data_tts_generate = jasper.data.tts_generator:main",
             "jasper_data_conv_generate = jasper.data.conv_generator:main",
             "jasper_data_nlu_generate = jasper.data.nlu_generator:main",
+            "jasper_data_test_generate = jasper.data.test_generator:main",
             "jasper_data_call_recycle = jasper.data.call_recycler:main",
             "jasper_data_asr_recycle = jasper.data.asr_recycler:main",
             "jasper_data_rev_recycle = jasper.data.rev_recycler:main",
             "jasper_data_server = jasper.data.server:main",
             "jasper_data_validation = jasper.data.validation.process:main",
             "jasper_data_preprocess = jasper.data.process:main",
+            "jasper_data_slu_evaluate = jasper.data.slu_evaluator:main",
         ]
     },
     zip_safe=False,

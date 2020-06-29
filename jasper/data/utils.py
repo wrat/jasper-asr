@@ -7,6 +7,7 @@ from itertools import product
 from functools import partial
 from math import floor
 from uuid import uuid4
+from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -99,6 +100,7 @@ def ui_dump_manifest_writer(output_dir, dataset_name, asr_data_source, verbose=F
         "data": [],
     }
     data_funcs = []
+    transcriber_gcp = gcp_transcribe_gen()
     transcriber_pretrained = transcribe_gen(asr_port=8044)
     with asr_manifest.open("w") as mf:
         print(f"writing manifest to {asr_manifest}")
@@ -115,6 +117,8 @@ def ui_dump_manifest_writer(output_dir, dataset_name, asr_data_source, verbose=F
             rel_pnr_path,
         ):
             pretrained_result = transcriber_pretrained(aud_seg.raw_data)
+            gcp_seg = aud_seg.set_frame_rate(16000)
+            gcp_result = transcriber_gcp(gcp_seg.raw_data)
             pretrained_wer = word_error_rate([transcript], [pretrained_result])
             wav_plot_path = (
                 dataset_dir / Path("wav_plots") / Path(fname).with_suffix(".png")
@@ -130,6 +134,7 @@ def ui_dump_manifest_writer(output_dir, dataset_name, asr_data_source, verbose=F
                 "spoken": transcript,
                 "caller": caller_name,
                 "utterance_id": fname,
+                "gcp_asr": gcp_result,
                 "pretrained_asr": pretrained_result,
                 "pretrained_wer": pretrained_wer,
                 "plot_path": str(wav_plot_path),
@@ -192,6 +197,32 @@ def asr_manifest_writer(asr_manifest_path: Path, manifest_str_source):
                 mani_dict["audio_filepath"], mani_dict["duration"], mani_dict["text"]
             )
             mf.write(manifest)
+
+
+def asr_test_writer(out_file_path: Path, source):
+    def dd_str(dd, idx):
+        path = dd["audio_filepath"]
+        # dur = dd["duration"]
+        # return f"SAY {idx}\nPAUSE 3\nPLAY {path}\nPAUSE 3\n\n"
+        return f"PAUSE 2\nPLAY {path}\nPAUSE 60\n\n"
+
+    res_file = out_file_path.with_suffix(".result.json")
+    with out_file_path.open("w") as of:
+        print(f"opening {out_file_path} for writing test")
+        results = []
+        idx = 0
+        for ui_dd in source:
+            results.append(ui_dd)
+            out_str = dd_str(ui_dd, idx)
+            of.write(out_str)
+            idx += 1
+        of.write("DO_HANGUP\n")
+        ExtendedPath(res_file).write_json(results)
+
+
+def batch(iterable, n=1):
+    ls = len(iterable)
+    return [iterable[ndx : min(ndx + n, ls)] for ndx in range(0, ls, n)]
 
 
 class ExtendedPath(type(Path())):
@@ -276,6 +307,181 @@ def generate_dates():
         ]
 
     return [dm for d, m in product(days, months) for dm in canon_vars(d, m)]
+
+
+def get_call_logs(call_obj, s3, call_meta_dir):
+    meta_s3_uri = call_obj["DataURI"]
+    s3_event_url_p = urlsplit(meta_s3_uri)
+    saved_meta_path = call_meta_dir / Path(Path(s3_event_url_p.path).name)
+    if not saved_meta_path.exists():
+        print(f"downloading : {saved_meta_path} from {meta_s3_uri}")
+        s3.download_file(
+            s3_event_url_p.netloc, s3_event_url_p.path[1:], str(saved_meta_path)
+        )
+    call_metas = json.load(saved_meta_path.open())
+    return call_metas
+
+
+def gcp_transcribe_gen():
+    from google.cloud import speech_v1
+    from google.cloud.speech_v1 import enums
+
+    # import io
+    client = speech_v1.SpeechClient()
+    # local_file_path = 'resources/brooklyn_bridge.raw'
+
+    # The language of the supplied audio
+    language_code = "en-US"
+    model = "phone_call"
+
+    # Sample rate in Hertz of the audio data sent
+    sample_rate_hertz = 16000
+
+    # Encoding of audio data sent. This sample sets this explicitly.
+    # This field is optional for FLAC and WAV audio formats.
+    encoding = enums.RecognitionConfig.AudioEncoding.LINEAR16
+    config = {
+        "language_code": language_code,
+        "sample_rate_hertz": sample_rate_hertz,
+        "encoding": encoding,
+        "model": model,
+        "enable_automatic_punctuation": True,
+        "max_alternatives": 10,
+        "enable_word_time_offsets": True,  # used to detect start and end time of utterances
+        "speech_contexts": [
+            {
+                "phrases": [
+                    "$OOV_CLASS_ALPHANUMERIC_SEQUENCE",
+                    "$OOV_CLASS_DIGIT_SEQUENCE",
+                    "$TIME",
+                    "$YEAR",
+                ]
+            },
+            {
+                "phrases": [
+                    "A",
+                    "B",
+                    "C",
+                    "D",
+                    "E",
+                    "F",
+                    "G",
+                    "H",
+                    "I",
+                    "J",
+                    "K",
+                    "L",
+                    "M",
+                    "N",
+                    "O",
+                    "P",
+                    "Q",
+                    "R",
+                    "S",
+                    "T",
+                    "U",
+                    "V",
+                    "W",
+                    "X",
+                    "Y",
+                    "Z",
+                ]
+            },
+            {
+                "phrases": [
+                    "PNR is $OOV_CLASS_ALPHANUMERIC_SEQUENCE",
+                    "my PNR is $OOV_CLASS_ALPHANUMERIC_SEQUENCE",
+                    "my PNR number is $OOV_CLASS_ALPHANUMERIC_SEQUENCE",
+                    "PNR number is $OOV_CLASS_ALPHANUMERIC_SEQUENCE",
+                    "It's $OOV_CLASS_ALPHANUMERIC_SEQUENCE",
+                    "$OOV_CLASS_ALPHANUMERIC_SEQUENCE is my PNR",
+                ]
+            },
+            {"phrases": ["my name is"]},
+            {"phrases": ["Number $ORDINAL", "Numeral $ORDINAL"]},
+            {
+                "phrases": [
+                    "John Smith",
+                    "Carina Hu",
+                    "Travis Lim",
+                    "Marvin Tan",
+                    "Samuel Tan",
+                    "Dawn Mathew",
+                    "Dawn",
+                    "Mathew",
+                ]
+            },
+            {
+                "phrases": [
+                    "Beijing",
+                    "Tokyo",
+                    "London",
+                    "19 August",
+                    "7 October",
+                    "11 December",
+                    "17 September",
+                    "19th August",
+                    "7th October",
+                    "11th December",
+                    "17th September",
+                    "ABC123",
+                    "KWXUNP",
+                    "XLU5K1",
+                    "WL2JV6",
+                    "KBS651",
+                ]
+            },
+            {
+                "phrases": [
+                    "first flight",
+                    "second flight",
+                    "third flight",
+                    "first option",
+                    "second option",
+                    "third option",
+                    "first one",
+                    "second one",
+                    "third one",
+                ]
+            },
+        ],
+        "metadata": {
+            "industry_naics_code_of_audio": 481111,
+            "interaction_type": enums.RecognitionMetadata.InteractionType.PHONE_CALL,
+        },
+    }
+
+    def sample_recognize(content):
+        """
+        Transcribe a short audio file using synchronous speech recognition
+
+        Args:
+          local_file_path Path to local audio file, e.g. /path/audio.wav
+        """
+
+        # with io.open(local_file_path, "rb") as f:
+        #     content = f.read()
+        audio = {"content": content}
+
+        response = client.recognize(config, audio)
+        for result in response.results:
+            # First alternative is the most probable result
+            return "/".join([alt.transcript for alt in result.alternatives])
+            # print(u"Transcript: {}".format(alternative.transcript))
+        return ""
+
+    return sample_recognize
+
+
+def parallel_apply(fn, iterable, workers=8):
+    with ThreadPoolExecutor(max_workers=workers) as exe:
+        print(f"parallelly applying {fn}")
+        return [
+            res
+            for res in tqdm(
+                exe.map(fn, iterable), position=0, leave=True, total=len(iterable)
+            )
+        ]
 
 
 def main():

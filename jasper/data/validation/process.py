@@ -271,7 +271,7 @@ def split_extract(
     dump_file: Path = Path("ui_dump.json"),
     manifest_file: Path = Path("manifest.json"),
     corrections_file: str = typer.Option("corrections.json", show_default=True),
-    conv_data_path: Path = Path("./data/conv_data.json"),
+    conv_data_path: Path = typer.Option(Path("./data/conv_data.json"), show_default=True),
     extraction_type: ExtractionType = ExtractionType.all,
 ):
     import shutil
@@ -299,10 +299,16 @@ def split_extract(
         asr_manifest_writer(dest_manifest_path, extract_manifest(manifest_gen))
 
         ui_data_path = dump_dir / Path(data_name) / dump_file
-        ui_data = json.load(ui_data_path.open())["data"]
+        orig_ui_data = ExtendedPath(ui_data_path).read_json()
+        ui_data = orig_ui_data["data"]
         file_ui_map = {Path(u["audio_filepath"]).stem: u for u in ui_data}
         extracted_ui_data = list(filter(lambda u: u["text"] in extraction_vals, ui_data))
-        ExtendedPath(dest_ui_path).write_json(extracted_ui_data)
+        final_data = []
+        for i, d in enumerate(extracted_ui_data):
+            d['real_idx'] = i
+            final_data.append(d)
+        orig_ui_data['data'] = final_data
+        ExtendedPath(dest_ui_path).write_json(orig_ui_data)
 
         if corrections_file:
             dest_correction_path = dest_data_dir / corrections_file
@@ -331,7 +337,7 @@ def update_corrections(
     manifest_file: Path = Path("manifest.json"),
     corrections_file: Path = Path("corrections.json"),
     ui_dump_file: Path = Path("ui_dump.json"),
-    skip_incorrect: bool = True,
+    skip_incorrect: bool = typer.Option(True, show_default=True),
 ):
     data_manifest_path = dump_dir / Path(data_name) / manifest_file
     corrections_path = dump_dir / Path(data_name) / corrections_file
