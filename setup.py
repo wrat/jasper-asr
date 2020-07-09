@@ -64,6 +64,7 @@ setup(
             "jasper_transcribe = jasper.transcribe:main",
             "jasper_server = jasper.server:main",
             "jasper_trainer = jasper.training.cli:main",
+            "jasper_evaluator = jasper.evaluate:main",
             "jasper_data_tts_generate = jasper.data.tts_generator:main",
             "jasper_data_conv_generate = jasper.data.conv_generator:main",
             "jasper_data_nlu_generate = jasper.data.nlu_generator:main",

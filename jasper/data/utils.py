@@ -163,16 +163,8 @@ def ui_dump_manifest_writer(output_dir, dataset_name, asr_data_source, verbose=F
                 )
             )
             num_datapoints += 1
-    with ThreadPoolExecutor() as exe:
-        print("starting all plot/transcription tasks")
-        dump_data = list(
-            tqdm(
-                exe.map(lambda x: x(), data_funcs),
-                position=0,
-                leave=True,
-                total=len(data_funcs),
-            )
-        )
+    dump_data = parallel_apply(lambda x: x(), data_funcs)
+    # dump_data = [x() for x in tqdm(data_funcs)]
     ui_dump["data"] = dump_data
     ExtendedPath(ui_dump_file).write_json(ui_dump)
     return num_datapoints
